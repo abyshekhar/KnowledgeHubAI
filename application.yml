@@ -30,7 +30,7 @@ vector_store:
 
 retrieval:
   top_k: 5
-  score_threshold: 0.7
+  score_threshold: 0.6
   hybrid_alpha: 0.75
   reranker:
     enabled: false
