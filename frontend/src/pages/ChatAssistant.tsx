@@ -1,5 +1,5 @@
 import { Send, Trash2 } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { PageHeader } from "../components/PageHeader";
@@ -15,6 +15,12 @@ export function ChatAssistant({ token }: { token: string }) {
   const [messages, setMessages] = useState<Array<{ role: string; content: string; sources?: ChatResponse["sources"] }>>([]);
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [isPending, setIsPending] = useState(false);
+  const messageEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto scroll to bottom of chat
+  useEffect(() => {
+    messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isPending]);
 
   const historyQuery = useQuery({
     queryKey: ["chat-history"],
@@ -95,8 +101,8 @@ export function ChatAssistant({ token }: { token: string }) {
   return (
     <>
       <PageHeader title="Chat Assistant" subtitle="Ask grounded questions and review every source used in the answer." />
-      <div className="grid grid-cols-[250px_1fr] h-[calc(100vh-150px)] rounded-md border border-line bg-white overflow-hidden">
-        <aside className="border-r border-line bg-slate-50 flex flex-col h-full">
+      <div className="grid grid-cols-[250px_1fr] h-[calc(100vh-180px)] rounded-md border border-line bg-white overflow-hidden">
+        <aside className="border-r border-line bg-slate-50 flex flex-col h-full min-h-0">
           <div className="p-3 border-b border-line">
             <button
               onClick={startNewChat}
@@ -105,7 +111,7 @@ export function ChatAssistant({ token }: { token: string }) {
               + New Chat
             </button>
           </div>
-          <div className="flex-1 overflow-auto p-2 space-y-1">
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
             {(historyQuery.data ?? []).map((session) => (
               <div
                 key={session.id}
@@ -138,8 +144,8 @@ export function ChatAssistant({ token }: { token: string }) {
           </div>
         </aside>
 
-        <section className="flex flex-col h-full bg-white">
-          <div className="flex-1 space-y-4 overflow-auto p-4">
+        <section className="flex flex-col h-full bg-white min-h-0">
+          <div className="flex-1 space-y-4 overflow-y-auto p-4">
             {messages.length === 0 && (
               <div className="flex h-full items-center justify-center text-sm text-slate-400">
                 Start typing to begin a new grounded conversation.
@@ -176,6 +182,7 @@ export function ChatAssistant({ token }: { token: string }) {
                 <span className="text-xs text-slate-500 ml-1">Thinking...</span>
               </div>
             )}
+            <div ref={messageEndRef} />
           </div>
           <form onSubmit={submit} className="flex gap-2 border-t border-line p-3">
             <input

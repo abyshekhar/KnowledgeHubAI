@@ -109,5 +109,9 @@ async def _index_document(document_id: int, settings: Settings) -> None:
     async with session_factory() as session:
         document = await session.get(Document, document_id)
         if document:
-            await IngestDocumentUseCase(settings, session).execute(document)
+            try:
+                await IngestDocumentUseCase(settings, session).execute(document)
+            except Exception:
+                document.status = "failed"
+                await session.commit()
 

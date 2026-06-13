@@ -40,10 +40,25 @@ async def history(
         await session.scalars(select(Conversation).where(Conversation.user_id == user.id).order_by(Conversation.created_at.desc()))
     ).all()
     response: list[dict] = []
+    updated_any = False
     for conversation in conversations:
         messages = (
             await session.scalars(select(Message).where(Message.conversation_id == conversation.id).order_by(Message.created_at))
         ).all()
+        
+        # Migrating legacy conversation titles
+        if conversation.title in ("KnowledgeHub chat", "KnowledgeHub Chat", "New conversation", None):
+            first_user_msg = next((m for m in messages if m.role == "user"), None)
+            if first_user_msg:
+                title = first_user_msg.content.strip()
+                if len(title) > 35:
+                    title = title[:35] + "..."
+                if not title:
+                    title = "New conversation"
+                conversation.title = title
+                session.add(conversation)
+                updated_any = True
+                
         response.append(
             {
                 "id": conversation.id,
@@ -58,6 +73,8 @@ async def history(
                 ],
             }
         )
+    if updated_any:
+        await session.commit()
     return response
 
 

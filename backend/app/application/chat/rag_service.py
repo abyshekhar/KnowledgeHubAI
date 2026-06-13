@@ -19,8 +19,45 @@ class RAGService:
         self.settings = settings
         self.session = session
 
+    def _is_greeting(self, question: str) -> bool:
+        cleaned = "".join(c for c in question.lower() if c.isalnum() or c.isspace()).strip()
+        greetings = {
+            "hi", "hello", "hey", "greetings", "good morning", "good afternoon",
+            "good evening", "yo", "hello there", "hi there", "howdy", "hola",
+            "whats up", "whatsup", "help", "info"
+        }
+        return cleaned in greetings
+
     async def answer(self, question: str, user: User, conversation_id: int | None = None) -> dict:
         started = perf_counter()
+
+        if self._is_greeting(question):
+            conversation = await self._conversation(user, conversation_id, question)
+            self.session.add(Message(conversation_id=conversation.id, role="user", content=question))
+            answer = (
+                "Hello! I am KnowledgeHub AI, your offline document assistant. "
+                "I can help answer questions based on the documents uploaded to the knowledge base.\n\n"
+                "To get started:\n"
+                "1. Go to the **Knowledge Base** tab and upload documents (PDF, DOCX, TXT, MD).\n"
+                "2. Once uploaded and indexed, type your query here.\n"
+                "3. I will search the documents and answer based strictly on the content, citing sources."
+            )
+            assistant = Message(
+                conversation_id=conversation.id,
+                role="assistant",
+                content=answer,
+                sources_json="[]",
+            )
+            self.session.add(assistant)
+            await self.session.commit()
+            return {
+                "answer": answer,
+                "sources": [],
+                "conversation_id": conversation.id,
+                "message_id": assistant.id,
+                "retrieval_latency_ms": 0,
+                "generation_latency_ms": 0,
+            }
         embeddings = create_embedding_provider(self.settings.embeddings)
         vector_store = create_vector_store(self.settings.vector_store)
         query_vector = embeddings.embed_query(question)
@@ -113,18 +150,45 @@ class RAGService:
             return LOW_CONFIDENCE_RESPONSE
         return answer.strip() or LOW_CONFIDENCE_RESPONSE
 
+    async def _generate_title(self, question: str) -> str:
+        # Fallback title if anything goes wrong
+        fallback = question.strip()
+        if len(fallback) > 35:
+            fallback = fallback[:35] + "..."
+        if not fallback:
+            fallback = "New conversation"
+
+        try:
+            llm = create_llm_provider(self.settings.llm)
+            title_prompt = (
+                "Generate a concise, 3-to-5 word title summarizing the following user query. "
+                "Do not include any quotes, markdown, punctuation, or introductory text. "
+                "Just output the title itself.\n\n"
+                f"Query: {question}"
+            )
+            generated = await llm.generate(title_prompt)
+            generated = generated.strip().strip('"').strip("'").strip("`").strip()
+            
+            # Clean up potential introductory phrases/prefixes
+            for prefix in ["title:", "summary:", "topic:"]:
+                if generated.lower().startswith(prefix):
+                    generated = generated[len(prefix):].strip()
+            
+            # Ensure it is valid, not too long, and not multiline
+            if generated and len(generated) <= 50 and "\n" not in generated:
+                return generated
+        except Exception:
+            pass
+            
+        return fallback
+
     async def _conversation(self, user: User, conversation_id: int | None, question: str) -> Conversation:
         if conversation_id:
             existing = await self.session.get(Conversation, conversation_id)
             if existing:
                 return existing
         
-        # Set dynamic title from first query
-        title = question.strip()
-        if len(title) > 35:
-            title = title[:35] + "..."
-        if not title:
-            title = "New conversation"
+        title = await self._generate_title(question)
 
         conversation = Conversation(user_id=user.id, title=title)
         self.session.add(conversation)
