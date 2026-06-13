@@ -13,6 +13,7 @@ export function ChatAssistant({ token }: { token: string }) {
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<Array<{ role: string; content: string; sources?: ChatResponse["sources"] }>>([]);
   const [conversationId, setConversationId] = useState<number | null>(null);
+  const [isPending, setIsPending] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -20,6 +21,7 @@ export function ChatAssistant({ token }: { token: string }) {
     const current = question;
     setQuestion("");
     setMessages((items) => [...items, { role: "user", content: current }]);
+    setIsPending(true);
     try {
       const response = await api<ChatResponse>("/chat/query", token, {
         method: "POST",
@@ -35,6 +37,8 @@ export function ChatAssistant({ token }: { token: string }) {
           content: "An error occurred while communicating with the assistant. Make sure the backend and local model runtime (Ollama) are active."
         }
       ]);
+    } finally {
+      setIsPending(false);
     }
   }
 
@@ -53,6 +57,14 @@ export function ChatAssistant({ token }: { token: string }) {
               ) : null}
             </div>
           ))}
+          {isPending && (
+            <div className="max-w-3xl rounded-md bg-slate-100 p-3 mr-auto flex items-center gap-2">
+              <span className="flex h-2 w-2 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.3s]"></span>
+              <span className="flex h-2 w-2 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.15s]"></span>
+              <span className="flex h-2 w-2 animate-bounce rounded-full bg-slate-400"></span>
+              <span className="text-xs text-slate-500 ml-1">Thinking...</span>
+            </div>
+          )}
         </div>
         <form onSubmit={submit} className="flex gap-2 border-t border-line p-3">
           <input className="h-11 flex-1 rounded-md border border-line px-3" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask about the knowledge base" />
