@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.application.chat.rag_service import RAGService
@@ -59,4 +59,21 @@ async def history(
             }
         )
     return response
+
+
+@router.delete("/conversations/{conversation_id}")
+async def delete_conversation(
+    conversation_id: int,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    conversation = await session.get(Conversation, conversation_id)
+    if conversation:
+        if conversation.user_id != user.id and (not user.role or user.role.name != "admin"):
+            raise HTTPException(status_code=403, detail="Not authorized to delete this conversation")
+        
+        await session.execute(delete(Message).where(Message.conversation_id == conversation_id))
+        await session.delete(conversation)
+        await session.commit()
+    return {"status": "ok"}
 

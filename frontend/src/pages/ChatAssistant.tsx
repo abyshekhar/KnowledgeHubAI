@@ -1,6 +1,6 @@
-import { Send } from "lucide-react";
+import { Send, Trash2 } from "lucide-react";
 import { FormEvent, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { PageHeader } from "../components/PageHeader";
 
@@ -56,6 +56,28 @@ export function ChatAssistant({ token }: { token: string }) {
     }
   }
 
+  const deleteChatMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const response = await fetch(`/api/chat/conversations/${id}`, {
+        method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      return response.json();
+    },
+    onSuccess: (_, id) => {
+      historyQuery.refetch();
+      if (conversationId === id) {
+        setConversationId(null);
+        setMessages([]);
+      }
+    }
+  });
+
   const startNewChat = () => {
     setConversationId(null);
     setMessages([]);
@@ -85,17 +107,33 @@ export function ChatAssistant({ token }: { token: string }) {
           </div>
           <div className="flex-1 overflow-auto p-2 space-y-1">
             {(historyQuery.data ?? []).map((session) => (
-              <button
+              <div
                 key={session.id}
-                onClick={() => loadSession(session)}
-                className={`w-full text-left px-3 py-2 rounded-md text-xs truncate transition ${
+                className={`group flex items-center justify-between px-2 py-1.5 rounded-md transition ${
                   conversationId === session.id
-                    ? "bg-slate-200 font-semibold text-slate-800"
+                    ? "bg-slate-200 text-slate-800 font-semibold"
                     : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                 }`}
               >
-                {session.title || "KnowledgeHub chat"}
-              </button>
+                <button
+                  onClick={() => loadSession(session)}
+                  className="flex-1 text-left text-xs truncate"
+                >
+                  {session.title || "KnowledgeHub chat"}
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (confirm("Are you sure you want to delete this chat session?")) {
+                      deleteChatMutation.mutate(session.id);
+                    }
+                  }}
+                  className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-red-500 transition"
+                  title="Delete chat session"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
             ))}
           </div>
         </aside>
