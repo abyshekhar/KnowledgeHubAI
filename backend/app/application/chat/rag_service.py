@@ -30,14 +30,23 @@ class RAGService:
             "knowledge_manager": ["user", "knowledge_manager", "manager"],
             "user": ["user"],
         }.get(role_name, ["user"])
-        results = vector_store.search(
+        from backend.app.infrastructure.retrieval.hybrid import HybridRetriever
+        from backend.app.infrastructure.retrieval.reranker import CrossEncoderReranker
+
+        retriever = HybridRetriever(self.settings, self.session, vector_store)
+        results = await retriever.retrieve(
+            question,
             query_vector,
-            self.settings.retrieval.top_k,
-            filters={"access_level": allowed_levels},
+            top_k=self.settings.retrieval.top_k * 2,
+            allowed_levels=allowed_levels,
         )
+
+        reranker = CrossEncoderReranker(self.settings.retrieval.reranker)
+        results = reranker.rerank(question, results)
         retrieval_latency_ms = int((perf_counter() - started) * 1000)
 
         accepted = [item for item in results if item.score >= self.settings.retrieval.score_threshold]
+        accepted = accepted[:self.settings.retrieval.top_k]
         if not accepted:
             answer = LOW_CONFIDENCE_RESPONSE
         else:
