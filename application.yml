@@ -1,0 +1,55 @@
+app:
+  name: KnowledgeHub AI
+  environment: development
+  secret_key: change-this-secret-before-production
+  access_token_minutes: 30
+  refresh_token_days: 7
+  upload_dir: data/uploads
+  index_dir: data/indexes
+  max_upload_mb: 50
+
+database:
+  provider: sqlite
+  url: sqlite+aiosqlite:///./data/knowledgehub.db
+
+llm:
+  provider: ollama
+  model: mistral
+  base_url: http://127.0.0.1:11434
+  temperature: 0.1
+  timeout_seconds: 120
+
+embeddings:
+  provider: huggingface
+  model: BAAI/bge-small-en-v1.5
+  batch_size: 32
+
+vector_store:
+  provider: faiss
+  path: data/indexes/faiss
+
+retrieval:
+  top_k: 5
+  score_threshold: 0.7
+  hybrid_alpha: 0.75
+  reranker:
+    enabled: false
+    model: BAAI/bge-reranker-base
+
+chunking:
+  strategy: recursive
+  chunk_size: 500
+  chunk_overlap: 50
+
+security:
+  allowed_extensions:
+    - .pdf
+    - .docx
+    - .txt
+    - .md
+  allowed_mime_types:
+    - application/pdf
+    - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+    - text/plain
+    - text/markdown
+

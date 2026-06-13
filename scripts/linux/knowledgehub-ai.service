@@ -1,0 +1,14 @@
+[Unit]
+Description=KnowledgeHub AI
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/knowledgehub-ai
+ExecStart=/opt/knowledgehub-ai/.venv/bin/python run.py
+Restart=on-failure
+User=knowledgehub
+
+[Install]
+WantedBy=multi-user.target
+
