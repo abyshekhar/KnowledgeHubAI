@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Upload, Trash2, Loader2, AlertCircle } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { api } from "../api/client";
@@ -17,6 +17,17 @@ export function KnowledgeBase({ token }: { token: string }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingFileName, setUploadingFileName] = useState<string | null>(null);
   const [uploadCategory, setUploadCategory] = useState<string>("General");
+
+  const categoriesQuery = useQuery({
+    queryKey: ["categories"],
+    queryFn: () => api<Array<{ id: number; name: string; description: string | null }>>("/categories", token)
+  });
+
+  useEffect(() => {
+    if (categoriesQuery.data && categoriesQuery.data.length > 0) {
+      setUploadCategory(categoriesQuery.data[0].name);
+    }
+  }, [categoriesQuery.data]);
 
   const documents = useQuery({
     queryKey: ["documents"],
@@ -149,13 +160,12 @@ export function KnowledgeBase({ token }: { token: string }) {
           <select
             value={uploadCategory}
             onChange={(e) => setUploadCategory(e.target.value)}
-            disabled={uploadMutation.isPending}
+            disabled={uploadMutation.isPending || categoriesQuery.isLoading}
             className="h-10 rounded-md border border-line bg-white px-3 py-1.5 text-sm text-slate-800 focus:border-brand focus:outline-none disabled:opacity-50"
           >
-            <option value="General">General</option>
-            <option value="HR">HR</option>
-            <option value="Project-Specific">Project-Specific</option>
-            <option value="Finance">Finance</option>
+            {(categoriesQuery.data ?? []).map((cat) => (
+              <option key={cat.id} value={cat.name}>{cat.name}</option>
+            ))}
           </select>
         </div>
         <input

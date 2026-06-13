@@ -18,6 +18,11 @@ export function ChatAssistant({ token }: { token: string }) {
   const [categoryFilter, setCategoryFilter] = useState<string>("All");
   const messageEndRef = useRef<HTMLDivElement>(null);
 
+  const categoriesQuery = useQuery({
+    queryKey: ["categories"],
+    queryFn: () => api<Array<{ id: number; name: string; description: string | null }>>("/categories", token)
+  });
+
   // Auto scroll to bottom of chat
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -155,13 +160,13 @@ export function ChatAssistant({ token }: { token: string }) {
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              className="h-8 rounded-md border border-line bg-white px-2 py-1 text-xs text-slate-800 focus:border-brand focus:outline-none"
+              disabled={categoriesQuery.isLoading}
+              className="h-8 rounded-md border border-line bg-white px-2 py-1 text-xs text-slate-800 focus:border-brand focus:outline-none disabled:opacity-60"
             >
               <option value="All">All Categories</option>
-              <option value="General">General</option>
-              <option value="HR">HR</option>
-              <option value="Project-Specific">Project-Specific</option>
-              <option value="Finance">Finance</option>
+              {(categoriesQuery.data ?? []).map((cat) => (
+                <option key={cat.id} value={cat.name}>{cat.name}</option>
+              ))}
             </select>
           </div>
 

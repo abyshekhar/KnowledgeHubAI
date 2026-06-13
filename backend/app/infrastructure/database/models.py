@@ -103,3 +103,11 @@ class AuditLog(Base, TimestampMixin):
     resource_id: Mapped[str | None] = mapped_column(String(128))
     details_json: Mapped[str] = mapped_column(Text, default="{}")
 
+
+class Category(Base, TimestampMixin):
+    __tablename__ = "categories"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    description: Mapped[str | None] = mapped_column(String(255))
+

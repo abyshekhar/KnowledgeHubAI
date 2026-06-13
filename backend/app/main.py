@@ -9,7 +9,7 @@ from prometheus_client import make_asgi_app
 from backend.app.config.settings import load_settings
 from backend.app.infrastructure.database.session import init_database
 from backend.app.infrastructure.logging.setup import configure_logging
-from backend.app.presentation.api.routes import analytics, auth, chat, documents, feedback, health, users
+from backend.app.presentation.api.routes import analytics, auth, chat, documents, feedback, health, users, categories
 
 
 @asynccontextmanager
@@ -40,6 +40,7 @@ app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(documents.router, prefix="/documents", tags=["documents"])
 app.include_router(chat.router, prefix="/chat", tags=["chat"])
+app.include_router(categories.router, prefix="/categories", tags=["categories"])
 app.include_router(feedback.router, prefix="/feedback", tags=["feedback"])
 app.include_router(analytics.router)
 app.mount("/metrics", make_asgi_app())

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { UserPlus, Loader2, AlertCircle } from "lucide-react";
+import { UserPlus, Loader2, AlertCircle, FolderPlus } from "lucide-react";
 import { api } from "../api/client";
 import { PageHeader } from "../components/PageHeader";
 
@@ -23,6 +23,16 @@ export function UserManagement({ token }: { token: string }) {
   const [newPassword, setNewPassword] = useState("");
   const [resetError, setResetError] = useState("");
   const [resetSuccess, setResetSuccess] = useState(false);
+
+  const [activeSubTab, setActiveSubTab] = useState<"users" | "categories">("users");
+  const [newCatName, setNewCatName] = useState("");
+  const [newCatDesc, setNewCatDesc] = useState("");
+  const [catErrorMsg, setCatErrorMsg] = useState("");
+
+  const categoriesQuery = useQuery({
+    queryKey: ["categories"],
+    queryFn: () => api<Array<{ id: number; name: string; description: string | null }>>("/categories", token)
+  });
 
   const usersQuery = useQuery({
     queryKey: ["users"],
@@ -139,6 +149,59 @@ export function UserManagement({ token }: { token: string }) {
     resetPasswordMutation.mutate({ id: resettingUser!.id, newPassword });
   };
 
+  const createCategoryMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/categories", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ name: newCatName, description: newCatDesc })
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      setNewCatName("");
+      setNewCatDesc("");
+      setCatErrorMsg("");
+      categoriesQuery.refetch();
+    },
+    onError: (err: any) => {
+      setCatErrorMsg(err.message || "Failed to create category.");
+    }
+  });
+
+  const deleteCategoryMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const response = await fetch(`/api/categories/${id}`, {
+        method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      categoriesQuery.refetch();
+    }
+  });
+
+  const handleCreateCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCatName.trim()) {
+      setCatErrorMsg("Category Name is required.");
+      return;
+    }
+    createCategoryMutation.mutate();
+  };
+
   const handleCreateUser = (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !fullName.trim() || !password.trim()) {
@@ -150,9 +213,29 @@ export function UserManagement({ token }: { token: string }) {
 
   return (
     <>
-      <PageHeader title="User Management" subtitle="Administer organization users, system roles, and account access." />
+      <PageHeader title="Admin Portal" subtitle="Administer organization users, system roles, categories, and parameters." />
 
-      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6 items-start">
+      <div className="mb-6 flex gap-4 border-b border-line">
+        <button
+          onClick={() => setActiveSubTab("users")}
+          className={`pb-2 text-sm font-semibold border-b-2 transition ${
+            activeSubTab === "users" ? "border-brand text-brand" : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          User Accounts
+        </button>
+        <button
+          onClick={() => setActiveSubTab("categories")}
+          className={`pb-2 text-sm font-semibold border-b-2 transition ${
+            activeSubTab === "categories" ? "border-brand text-brand" : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          Category Master
+        </button>
+      </div>
+
+      {activeSubTab === "users" ? (
+        <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6 items-start">
         {/* Create User Card */}
         <div className="rounded-md border border-line bg-white p-5">
           <h3 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
@@ -293,6 +376,94 @@ export function UserManagement({ token }: { token: string }) {
           </table>
         </div>
       </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6 items-start animate-in fade-in duration-200">
+          {/* Create Category Card */}
+          <div className="rounded-md border border-line bg-white p-5">
+            <h3 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
+              <FolderPlus size={16} className="text-brand" />
+              Add New Category
+            </h3>
+            <form onSubmit={handleCreateCategory} className="space-y-4">
+              {catErrorMsg && (
+                <div className="rounded bg-red-50 p-2 text-xs text-red-700 border border-red-200 flex items-start gap-1">
+                  <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                  <span>{catErrorMsg}</span>
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">Category Name</label>
+                <input
+                  type="text"
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  className="w-full h-9 px-3 rounded border border-line text-sm focus:border-brand focus:outline-none"
+                  placeholder="e.g. HR-Internal"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">Description (Optional)</label>
+                <textarea
+                  value={newCatDesc}
+                  onChange={(e) => setNewCatDesc(e.target.value)}
+                  className="w-full h-20 px-3 py-1.5 rounded border border-line text-sm focus:border-brand focus:outline-none resize-none"
+                  placeholder="e.g. Documents relating to HR policies and guides"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={createCategoryMutation.isPending}
+                className="w-full h-9 bg-brand text-white font-medium text-sm rounded hover:bg-brand/90 transition flex items-center justify-center gap-1.5 disabled:opacity-60"
+              >
+                {createCategoryMutation.isPending && <Loader2 size={14} className="animate-spin" />}
+                Create Category
+              </button>
+            </form>
+          </div>
+
+          {/* Categories Table */}
+          <div className="overflow-hidden rounded-md border border-line bg-white">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 text-slate-600">
+                <tr>
+                  <th className="px-4 py-3">Category Name</th>
+                  <th className="px-4 py-3">Description</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {categoriesQuery.isLoading ? (
+                  <tr>
+                    <td colSpan={3} className="px-4 py-8 text-center text-slate-400">
+                      <Loader2 className="animate-spin inline mr-2" size={16} />
+                      Loading categories...
+                    </td>
+                  </tr>
+                ) : (categoriesQuery.data ?? []).map((cat) => (
+                  <tr key={cat.id} className="border-t border-line hover:bg-slate-50/40">
+                    <td className="px-4 py-3 font-medium text-slate-700">{cat.name}</td>
+                    <td className="px-4 py-3 text-slate-600">{cat.description || "-"}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() => {
+                          if (confirm(`Are you sure you want to delete category "${cat.name}"?`)) {
+                            deleteCategoryMutation.mutate(cat.id);
+                          }
+                        }}
+                        disabled={["General", "HR", "Project-Specific", "Finance"].includes(cat.name)}
+                        className="text-xs font-semibold px-2.5 py-1 rounded transition text-red-600 bg-red-50 hover:bg-red-100 disabled:opacity-45"
+                        title={["General", "HR", "Project-Specific", "Finance"].includes(cat.name) ? "Protected system category" : "Delete category"}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {resettingUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">

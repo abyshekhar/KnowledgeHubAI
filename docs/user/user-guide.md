@@ -29,6 +29,7 @@ Administrators can manage users by navigating to the **Users** tab:
 - **Role Assignment**: Change a user's role in real-time by selecting a role from the dropdown menu.
 - **Deactivate/Activate User**: Toggle a user's active status. Deactivated users are immediately blocked from logging in or calling API endpoints.
 - **Reset Password**: Click **Reset Password** on a user's row, type the new password, and click **Save Password**.
+- **Category Master Maintenance**: Select the **Category Master** sub-tab in the Admin Portal. Administrators can view, create new document categories, and delete custom categories. Protected default categories (`General`, `HR`, `Project-Specific`, `Finance`) cannot be deleted.
 
 ## Changing Your Password
 
