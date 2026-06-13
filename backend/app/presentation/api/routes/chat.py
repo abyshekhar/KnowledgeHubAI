@@ -19,6 +19,7 @@ router = APIRouter()
 class ChatRequest(BaseModel):
     question: str
     conversation_id: int | None = None
+    category: str | None = None
 
 
 @router.post("/query")
@@ -28,7 +29,9 @@ async def query(
     settings: Annotated[Settings, Depends(get_settings)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> dict:
-    return await RAGService(settings, session).answer(payload.question, user, payload.conversation_id)
+    return await RAGService(settings, session).answer(
+        payload.question, user, payload.conversation_id, payload.category
+    )
 
 
 @router.get("/history")

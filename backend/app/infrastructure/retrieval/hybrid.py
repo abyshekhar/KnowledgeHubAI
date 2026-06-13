@@ -27,12 +27,17 @@ class HybridRetriever:
         query_vector: list[float],
         top_k: int,
         allowed_levels: list[str],
+        category: str | None = None,
     ) -> list[VectorSearchResult]:
         # 1. Dense vector search
+        dense_filters = {"access_level": allowed_levels}
+        if category and category.lower() != "all":
+            dense_filters["category"] = category
+
         dense_results = self.vector_store.search(
             query_vector,
             top_k=top_k * 2,  # Retrieve more candidates for blending
-            filters={"access_level": allowed_levels},
+            filters=dense_filters,
         )
 
         # 2. Sparse BM25 keyword search
@@ -41,8 +46,11 @@ class HybridRetriever:
             select(Chunk)
             .join(Chunk.document)
             .where(Document.access_level.in_(allowed_levels))
-            .options(selectinload(Chunk.document))
         )
+        if category and category.lower() != "all":
+            stmt = stmt.where(Document.category == category)
+        stmt = stmt.options(selectinload(Chunk.document))
+
         result = await self.session.scalars(stmt)
         db_chunks = result.all()
 

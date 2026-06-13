@@ -28,7 +28,7 @@ class RAGService:
         }
         return cleaned in greetings
 
-    async def answer(self, question: str, user: User, conversation_id: int | None = None) -> dict:
+    async def answer(self, question: str, user: User, conversation_id: int | None = None, category: str | None = None) -> dict:
         started = perf_counter()
 
         if self._is_greeting(question):
@@ -76,6 +76,7 @@ class RAGService:
             query_vector,
             top_k=self.settings.retrieval.top_k * 2,
             allowed_levels=allowed_levels,
+            category=category,
         )
 
         reranker = CrossEncoderReranker(self.settings.retrieval.reranker)

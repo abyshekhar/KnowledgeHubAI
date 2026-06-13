@@ -13,13 +13,24 @@ export function AppLayout({
   activePage,
   onNavigate,
   onLogout,
+  role = "user",
   children
 }: {
   activePage: string;
   onNavigate: (page: string) => void;
   onLogout: () => void;
+  role?: string;
   children: ReactNode;
 }) {
+  const filteredItems = items.filter((item) => {
+    const roleLower = role.toLowerCase();
+    if (roleLower === "admin") return true;
+    if (roleLower === "knowledge_manager") {
+      return item.id !== "users";
+    }
+    return item.id === "dashboard" || item.id === "chat";
+  });
+
   return (
     <div className="min-h-screen bg-panel text-ink">
       <aside className="fixed inset-y-0 left-0 w-64 border-r border-line bg-white">
@@ -28,7 +39,7 @@ export function AppLayout({
           <p className="text-xs text-slate-500">Offline knowledge assistant</p>
         </div>
         <nav className="space-y-1 p-3">
-          {items.map((item) => {
+          {filteredItems.map((item) => {
             const Icon = item.icon;
             const active = item.id === activePage;
             return (

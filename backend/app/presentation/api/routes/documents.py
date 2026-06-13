@@ -22,6 +22,7 @@ async def upload_document(
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: Annotated[Settings, Depends(get_settings)],
     user: Annotated[User, Depends(get_current_user)],
+    category: str | None = None,
 ) -> dict:
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in settings.security.allowed_extensions:
@@ -40,6 +41,7 @@ async def upload_document(
         document_type=suffix.removeprefix("."),
         status="pending",
         uploaded_by_id=user.id,
+        category=category,
     )
     session.add(document)
     await session.commit()

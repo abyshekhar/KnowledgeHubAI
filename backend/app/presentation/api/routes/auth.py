@@ -11,7 +11,7 @@ from backend.app.config.settings import Settings
 from backend.app.infrastructure.auth.passwords import hash_password, verify_password
 from backend.app.infrastructure.auth.tokens import create_token
 from backend.app.infrastructure.database.models import Role, User
-from backend.app.presentation.api.dependencies import get_session, get_settings
+from backend.app.presentation.api.dependencies import get_session, get_settings, get_current_user
 from backend.app.shared.validation import normalize_email_identifier
 
 router = APIRouter()
@@ -90,6 +90,16 @@ async def refresh() -> TokenResponse:
 @router.post("/logout")
 async def logout() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@router.get("/me")
+async def get_me(user: Annotated[User, Depends(get_current_user)]) -> dict:
+    return {
+        "id": user.id,
+        "email": user.email,
+        "full_name": user.full_name,
+        "role": user.role.name if user.role else "user",
+    }
 
 
 def _tokens(email: str, settings: Settings) -> TokenResponse:

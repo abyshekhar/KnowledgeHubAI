@@ -10,11 +10,13 @@ type DocumentRow = {
   document_type: string;
   status: string;
   access_level: string;
+  category?: string;
 };
 
 export function KnowledgeBase({ token }: { token: string }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingFileName, setUploadingFileName] = useState<string | null>(null);
+  const [uploadCategory, setUploadCategory] = useState<string>("General");
 
   const documents = useQuery({
     queryKey: ["documents"],
@@ -33,7 +35,7 @@ export function KnowledgeBase({ token }: { token: string }) {
       const formData = new FormData();
       formData.append("file", file);
       
-      const response = await fetch("/api/documents/upload", {
+      const response = await fetch(`/api/documents/upload?category=${encodeURIComponent(uploadCategory)}`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${token}`
@@ -142,6 +144,20 @@ export function KnowledgeBase({ token }: { token: string }) {
       )}
 
       <div className="mb-4 flex justify-end gap-3 items-center">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-slate-500">Category:</span>
+          <select
+            value={uploadCategory}
+            onChange={(e) => setUploadCategory(e.target.value)}
+            disabled={uploadMutation.isPending}
+            className="h-10 rounded-md border border-line bg-white px-3 py-1.5 text-sm text-slate-800 focus:border-brand focus:outline-none disabled:opacity-50"
+          >
+            <option value="General">General</option>
+            <option value="HR">HR</option>
+            <option value="Project-Specific">Project-Specific</option>
+            <option value="Finance">Finance</option>
+          </select>
+        </div>
         <input
           type="file"
           ref={fileInputRef}
@@ -169,6 +185,7 @@ export function KnowledgeBase({ token }: { token: string }) {
             <tr>
               <th className="px-4 py-3">Document</th>
               <th className="px-4 py-3">Type</th>
+              <th className="px-4 py-3">Category</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Access</th>
               <th className="px-4 py-3 text-right">Actions</th>
@@ -183,6 +200,9 @@ export function KnowledgeBase({ token }: { token: string }) {
                 </td>
                 <td className="px-4 py-3 text-slate-400">
                   {uploadingFileName.split(".").pop()?.toUpperCase() || "-"}
+                </td>
+                <td className="px-4 py-3 text-slate-400">
+                  {uploadCategory}
                 </td>
                 <td className="px-4 py-3">
                   <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-700/10">
@@ -199,6 +219,7 @@ export function KnowledgeBase({ token }: { token: string }) {
               <tr key={document.id} className="border-t border-line">
                 <td className="px-4 py-3 font-medium">{document.name}</td>
                 <td className="px-4 py-3 uppercase">{document.document_type}</td>
+                <td className="px-4 py-3">{document.category || "General"}</td>
                 <td className="px-4 py-3">{getStatusBadge(document.status)}</td>
                 <td className="px-4 py-3">{document.access_level}</td>
                 <td className="px-4 py-3 text-right">
@@ -219,7 +240,7 @@ export function KnowledgeBase({ token }: { token: string }) {
             
             {!uploadingFileName && (documents.data ?? []).length === 0 && (
               <tr className="border-t border-line">
-                <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
                   No documents found. Click the Upload button to add files.
                 </td>
               </tr>

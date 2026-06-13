@@ -120,3 +120,66 @@ def test_faiss_delete_document(tmp_path):
     assert len(store._chunks) == 1
     assert store._chunks[0].text == "World"
 
+
+@pytest.mark.asyncio
+async def test_hybrid_retriever_filters_by_category():
+    # Setup mocks
+    settings = Settings()
+    settings.retrieval = RetrievalSettings(top_k=2, hybrid_alpha=0.5)
+    
+    # 2 mock chunks in database
+    db_chunk1 = MagicMock()
+    db_chunk1.text = "Hello world chunk"
+    db_chunk1.page_number = 1
+    db_chunk1.section = "Introduction"
+    db_chunk1.metadata_json = '{"some": "meta"}'
+    db_chunk1.document.name = "Doc1.pdf"
+    db_chunk1.document.document_type = "pdf"
+    db_chunk1.document.access_level = "user"
+    db_chunk1.document.category = "general"
+
+    db_chunk2 = MagicMock()
+    db_chunk2.text = "FastAPI is awesome"
+    db_chunk2.page_number = 2
+    db_chunk2.section = "FastAPI"
+    db_chunk2.metadata_json = '{}'
+    db_chunk2.document.name = "Doc2.pdf"
+    db_chunk2.document.document_type = "pdf"
+    db_chunk2.document.access_level = "user"
+    db_chunk2.document.category = "tech"
+
+    session = AsyncMock()
+    # Mock database scalars to return only the first chunk since we'll filter by category='general'
+    scalars_mock = MagicMock()
+    scalars_mock.all.return_value = [db_chunk1]
+    session.scalars.return_value = scalars_mock
+
+    # Mock vector store
+    vector_store = MagicMock()
+    chunk1 = DocumentChunk(text="Hello world chunk", document_name="Doc1.pdf", document_type="pdf")
+    
+    # Dense results: only chunk1 gets returned when filtering
+    vector_store.search.return_value = [
+        VectorSearchResult(chunk1, 0.8)
+    ]
+
+    retriever = HybridRetriever(settings, session, vector_store)
+    results = await retriever.retrieve(
+        query="FastAPI awesome",
+        query_vector=[0.1] * 384,
+        top_k=2,
+        allowed_levels=["user"],
+        category="general"
+    )
+
+    # Verify filtering occurred in dense search
+    vector_store.search.assert_called_once_with(
+        [0.1] * 384,
+        top_k=4,
+        filters={"access_level": ["user"], "category": "general"}
+    )
+
+    assert len(results) == 1
+    assert results[0].chunk.text == "Hello world chunk"
+
+
