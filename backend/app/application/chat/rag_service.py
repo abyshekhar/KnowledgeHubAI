@@ -69,7 +69,7 @@ class RAGService:
             for item in accepted
         ]
 
-        conversation = await self._conversation(user, conversation_id)
+        conversation = await self._conversation(user, conversation_id, question)
         self.session.add(Message(conversation_id=conversation.id, role="user", content=question))
         assistant = Message(
             conversation_id=conversation.id,
@@ -113,12 +113,20 @@ class RAGService:
             return LOW_CONFIDENCE_RESPONSE
         return answer.strip() or LOW_CONFIDENCE_RESPONSE
 
-    async def _conversation(self, user: User, conversation_id: int | None) -> Conversation:
+    async def _conversation(self, user: User, conversation_id: int | None, question: str) -> Conversation:
         if conversation_id:
             existing = await self.session.get(Conversation, conversation_id)
             if existing:
                 return existing
-        conversation = Conversation(user_id=user.id, title="KnowledgeHub chat")
+        
+        # Set dynamic title from first query
+        title = question.strip()
+        if len(title) > 35:
+            title = title[:35] + "..."
+        if not title:
+            title = "New conversation"
+
+        conversation = Conversation(user_id=user.id, title=title)
         self.session.add(conversation)
         await self.session.flush()
         return conversation
