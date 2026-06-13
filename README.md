@@ -1,69 +1,142 @@
 # KnowledgeHub AI
 
-Fully offline, self-hosted AI knowledge assistant for private organizational knowledge bases.
+KnowledgeHub AI is a fully offline, self-hosted, enterprise-grade AI Knowledge Assistant designed to let organizations chat securely with internal document bases (PDF, DOCX, Markdown, and TXT) using natural language.
 
-KnowledgeHub AI is designed for single-machine enterprise deployment with open-source components only. It uses FastAPI, SQLite, FAISS-compatible vector storage, configurable local LLM providers, and a React/Vite admin UI.
+---
 
-## Highlights
+## Key Highlights
 
-- Offline-first RAG architecture with no paid API dependency
-- Clean Architecture backend split into presentation, application, domain, infrastructure, shared, and config layers
-- Configurable Ollama or Transformers LLM providers
-- Configurable FAISS or Qdrant vector store abstraction, with FAISS as the default
-- JWT auth, refresh tokens, role-based access control, audit-friendly data model
-- Document ingestion for PDF, DOCX, Markdown, and TXT
-- Source-cited grounded answers with low-confidence fallback
-- SQLite by default, PostgreSQL-ready database configuration
-- No Docker, Redis, Celery, cloud, OpenAI, or Azure OpenAI requirement
+- **100% Offline-Capable**: Fully runs on a single local machine or corporate server without sending data to external APIs (no OpenAI, no Azure, no third-party cloud dependency).
+- **Clean Architecture & Enterprise Patterns**: Strongly separated into presentation, application, domain, infrastructure, and configuration layers.
+- **Advanced Chunking Pipeline**: Supports recursive character chunking, structural section-aware chunking, and similarity-based semantic sentence chunking.
+- **Hybrid Retrieval System**: Combines FAISS dense semantic search and BM25 sparse keyword-based search with linear score blending (`hybrid_alpha`) and CrossEncoder rerankers.
+- **Security & Access Control**: Features JWT session/refresh tokens, Role-Based Access Control (Admin, Knowledge Manager, and User), and access level document filtering.
+- **FastAPI + React/Vite Admin Console**: Modern responsive dashboard, document upload manager, conversational chat assistant, and user management UI.
 
-## Quick Start
+---
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python setup.py
-python run.py
-```
-
-Frontend:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Default API: `http://127.0.0.1:8000`
-
-Default UI: `http://127.0.0.1:5173`
-
-## Default Login
-
-`python setup.py` creates an admin user:
-
-- Email: `admin@knowledgehub.local`
-- Password: `ChangeMe123!`
-
-Change this before production use.
-
-## Project Layout
+## Architecture Overview
 
 ```text
-backend/
-  app/
-    presentation/      FastAPI routes and dependencies
-    application/       Use cases and orchestration
-    domain/            Entities, repository ports, service ports
-    infrastructure/    SQLAlchemy, auth, local AI providers, vector stores
-    shared/            Errors, pagination, utilities
-    config/            YAML and environment-backed settings
-frontend/              React + TypeScript + Vite + TailwindCSS UI
-docs/                  Architecture, user, and deployment guides
-scripts/               Platform startup and service helpers
+                               ┌────────────────────────┐
+                               │       React App        │
+                               └───────────┬────────────┘
+                                           │ API Requests
+                                           ▼
+                               ┌────────────────────────┐
+                               │      FastAPI App       │
+                               └───────────┬────────────┘
+                                           │
+      ┌──────────────────────┬─────────────┴─────────────┬──────────────────────┐
+      ▼                      ▼                           ▼                      ▼
+┌───────────┐          ┌───────────┐               ┌───────────┐          ┌───────────┐
+│ Database  │          │ Vector    │               │ Local LLM │          │ Embeddings│
+│ (SQLite)  │          │ (FAISS)   │               │ (Ollama)  │          │ (HF Trans)│
+└───────────┘          └───────────┘               └───────────┘          └───────────┘
 ```
 
-## Portfolio Scope
+The system is organized into a five-tier architecture under the `backend/app` namespace:
+- **Presentation**: FastAPI routes, routers, and token dependency injection resolvers.
+- **Application**: RAG orchestration services, feedback processing, and document ingestion use cases.
+- **Domain**: Domain models (DocumentChunk, User) and vector store/LLM service abstractions.
+- **Infrastructure**: SQLAlchemy, FAISS vector indexing, Ollama providers, and sentence-transformers.
+- **Config**: Settings validated using Pydantic v2 and loaded from `application.yml`.
 
-This repository is a production-shaped starter implementation. Local model quality and speed depend on the models installed on the target machine. The default configuration is conservative and runs with SQLite plus local files.
+---
 
+## Getting Started
+
+### Prerequisites
+- Python 3.12+
+- Node.js 18+ & npm
+- [Ollama](https://ollama.com/) (configured and running locally)
+
+### Quick Start Setup
+
+1. **Clone and Enter Repository**:
+   ```bash
+   git clone <repository_url> knowledgehub-ai
+   cd knowledgehub-ai
+   ```
+
+2. **Initialize Python Virtual Environment & Dependencies**:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
+
+3. **Initialize Database & Create Admin User**:
+   ```bash
+   python setup.py
+   ```
+   *Note: This creates the default administrator login:*
+   - **Email**: `admin@knowledgehub.local`
+   - **Password**: `ChangeMe123!`
+
+4. **Launch Backend API Server**:
+   ```bash
+   python run.py
+   ```
+   *The backend starts at: `http://127.0.0.1:8000`*
+
+5. **Start Frontend Dev Server**:
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+   *The client console runs at: `http://127.0.0.1:5173`*
+
+---
+
+## Configuration Settings
+
+The system settings are managed inside `application.yml`. Important configuration blocks include:
+
+```yaml
+llm:
+  provider: ollama
+  model: mistral
+  base_url: http://127.0.0.1:11434
+  temperature: 0.1
+
+embeddings:
+  provider: huggingface
+  model: BAAI/bge-small-en-v1.5
+
+retrieval:
+  top_k: 5
+  score_threshold: 0.7
+  hybrid_alpha: 0.75
+  reranker:
+    enabled: false
+    model: BAAI/bge-reranker-base
+
+chunking:
+  strategy: recursive  # Values: recursive, section, semantic
+  chunk_size: 500
+  chunk_overlap: 50
+```
+
+---
+
+## Verification & Testing
+
+Verify system correctness by executing the test suite:
+```bash
+PYTHONPATH=. .venv/bin/pytest
+```
+
+---
+
+## Deployment Guides
+
+### macOS (launchd plist service)
+Refer to launchd examples in `scripts/macos/com.knowledgehub.ai.plist` and run `scripts/macos/start.sh`.
+
+### Linux (systemd service)
+Copy the service configuration template `scripts/linux/knowledgehub-ai.service` into `/etc/systemd/system/` and reload daemon.
+
+### Windows (PowerShell service)
+Follow details inside `scripts/windows/install-service.md` and trigger `scripts/windows/start.ps1`.

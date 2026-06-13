@@ -1,17 +1,29 @@
 import { Database, FileCheck, Files, MessageSquare, Users } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "../api/client";
 import { PageHeader } from "../components/PageHeader";
 import { StatTile } from "../components/StatTile";
 
 export function Dashboard({ token }: { token: string }) {
-  void token;
+  const { data: metrics } = useQuery({
+    queryKey: ["dashboard-metrics"],
+    queryFn: () =>
+      api<{
+        total_documents: number;
+        total_chunks: number;
+        total_users: number;
+        feedback_count: number;
+      }>("/analytics/dashboard", token)
+  });
+
   return (
     <>
       <PageHeader title="Dashboard" subtitle="Operational overview for offline knowledge operations." />
       <div className="grid grid-cols-4 gap-4">
-        <StatTile label="Total documents" value="0" icon={Files} />
-        <StatTile label="Indexed documents" value="0" icon={FileCheck} />
-        <StatTile label="Users" value="1" icon={Users} />
-        <StatTile label="Queries today" value="0" icon={MessageSquare} />
+        <StatTile label="Total documents" value={metrics?.total_documents?.toString() ?? "0"} icon={Files} />
+        <StatTile label="Total chunks" value={metrics?.total_chunks?.toString() ?? "0"} icon={FileCheck} />
+        <StatTile label="Total users" value={metrics?.total_users?.toString() ?? "0"} icon={Users} />
+        <StatTile label="Feedback count" value={metrics?.feedback_count?.toString() ?? "0"} icon={MessageSquare} />
       </div>
       <section className="mt-6 grid grid-cols-[1.2fr_0.8fr] gap-4">
         <div className="rounded-md border border-line bg-white">
