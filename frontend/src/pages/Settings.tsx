@@ -10,7 +10,7 @@ const rows = [
   ["Database", "sqlite"]
 ];
 
-export function Settings({ token, role, userId }: { token: string; role: string; userId?: number }) {
+export function Settings({ token, role }: { token: string; role: string }) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -19,15 +19,13 @@ export function Settings({ token, role, userId }: { token: string; role: string;
   const [successMsg, setSuccessMsg] = useState("");
 
   const showSystemConfig = role === "admin" || role === "knowledge_manager";
-  const isAdmin = role === "admin";
 
   async function handlePasswordChange(e: React.FormEvent) {
     e.preventDefault();
     setErrorMsg("");
     setSuccessMsg("");
 
-    const requiresCurrent = !isAdmin;
-    if ((requiresCurrent && !currentPassword.trim()) || !newPassword.trim() || !confirmPassword.trim()) {
+    if (!currentPassword.trim() || !newPassword.trim() || !confirmPassword.trim()) {
       setErrorMsg("All fields are required.");
       return;
     }
@@ -42,40 +40,24 @@ export function Settings({ token, role, userId }: { token: string; role: string;
 
     setIsPending(true);
     try {
-      let response: Response;
-      if (isAdmin) {
-        // Admins reset their own password via the users update endpoint
-        response = await fetch(`/api/users/${userId}`, {
-          method: "PUT",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            password: newPassword
-          })
-        });
-      } else {
-        // Users & Managers change password via auth endpoint
-        response = await fetch("/api/auth/change-password", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            current_password: currentPassword,
-            new_password: newPassword
-          })
-        });
-      }
+      const response = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          current_password: currentPassword,
+          new_password: newPassword
+        })
+      });
 
       if (!response.ok) {
         const txt = await response.text();
         throw new Error(txt);
       }
 
-      setSuccessMsg(isAdmin ? "Password reset successfully!" : "Password changed successfully!");
+      setSuccessMsg("Password changed successfully!");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
@@ -125,11 +107,11 @@ export function Settings({ token, role, userId }: { token: string; role: string;
           )}
         </div>
 
-        {/* Right column: Change / Reset Password Form */}
+        {/* Right column: Change Password Form */}
         <div className="rounded-md border border-line bg-white p-5">
           <h3 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
             <KeyRound size={16} className="text-brand" />
-            {isAdmin ? "Reset Password" : "Change Password"}
+            Change Password
           </h3>
           <form onSubmit={handlePasswordChange} className="space-y-4">
             {errorMsg && (
@@ -143,18 +125,16 @@ export function Settings({ token, role, userId }: { token: string; role: string;
                 {successMsg}
               </div>
             )}
-            {!isAdmin && (
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 mb-1">Current Password</label>
-                <input
-                  type="password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="w-full h-9 px-3 rounded border border-line text-sm focus:border-brand focus:outline-none"
-                  placeholder="••••••••"
-                />
-              </div>
-            )}
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1">Current Password</label>
+              <input
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className="w-full h-9 px-3 rounded border border-line text-sm focus:border-brand focus:outline-none"
+                placeholder="••••••••"
+              />
+            </div>
             <div>
               <label className="block text-xs font-semibold text-slate-500 mb-1">New Password</label>
               <input
@@ -181,7 +161,7 @@ export function Settings({ token, role, userId }: { token: string; role: string;
               className="w-full h-9 bg-brand text-white font-medium text-sm rounded hover:bg-brand/90 transition flex items-center justify-center gap-1.5 disabled:opacity-60"
             >
               {isPending && <Loader2 size={14} className="animate-spin" />}
-              {isAdmin ? "Reset Password" : "Update Password"}
+              Update Password
             </button>
           </form>
         </div>

@@ -56,7 +56,7 @@ function App() {
   const pages: Record<string, React.ReactNode> = {
     dashboard: <Dashboard token={token} />,
     chat: <ChatAssistant token={token} />,
-    settings: <Settings token={token} role={userRole} userId={profileQuery.data?.id} />,
+    settings: <Settings token={token} role={userRole} />,
     ...(userRole === "admin" || userRole === "knowledge_manager" ? {
       knowledge: <KnowledgeBase token={token} />,
     } : {}),
