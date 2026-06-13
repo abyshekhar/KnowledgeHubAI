@@ -28,7 +28,7 @@ export function AppLayout({
     if (roleLower === "knowledge_manager") {
       return item.id !== "users";
     }
-    return item.id === "dashboard" || item.id === "chat";
+    return item.id === "dashboard" || item.id === "chat" || item.id === "settings";
   });
 
   return (

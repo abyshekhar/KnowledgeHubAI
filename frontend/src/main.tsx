@@ -56,9 +56,9 @@ function App() {
   const pages: Record<string, React.ReactNode> = {
     dashboard: <Dashboard token={token} />,
     chat: <ChatAssistant token={token} />,
+    settings: <Settings token={token} role={userRole} />,
     ...(userRole === "admin" || userRole === "knowledge_manager" ? {
       knowledge: <KnowledgeBase token={token} />,
-      settings: <Settings />
     } : {}),
     ...(userRole === "admin" ? {
       users: <UserManagement token={token} />
@@ -68,7 +68,6 @@ function App() {
   const handleNavigate = (nextPage: string) => {
     if (nextPage === "users" && userRole !== "admin") return;
     if (nextPage === "knowledge" && userRole !== "admin" && userRole !== "knowledge_manager") return;
-    if (nextPage === "settings" && userRole !== "admin" && userRole !== "knowledge_manager") return;
 
     localStorage.setItem("knowledgehub_page", nextPage);
     setPage(nextPage);

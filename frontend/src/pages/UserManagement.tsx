@@ -19,6 +19,11 @@ export function UserManagement({ token }: { token: string }) {
   const [role, setRole] = useState("user");
   const [errorMsg, setErrorMsg] = useState("");
 
+  const [resettingUser, setResettingUser] = useState<UserRow | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [resetError, setResetError] = useState("");
+  const [resetSuccess, setResetSuccess] = useState(false);
+
   const usersQuery = useQuery({
     queryKey: ["users"],
     queryFn: () => api<UserRow[]>("/users", token)
@@ -91,6 +96,48 @@ export function UserManagement({ token }: { token: string }) {
       usersQuery.refetch();
     }
   });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: async ({ id, newPassword }: { id: number; newPassword: string }) => {
+      const response = await fetch(`/api/users/${id}`, {
+        method: "PUT",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ password: newPassword })
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      setResetSuccess(true);
+      setNewPassword("");
+      setTimeout(() => {
+        setResettingUser(null);
+        setResetSuccess(false);
+      }, 1500);
+    },
+    onError: (err: any) => {
+      setResetError(err.message || "Failed to reset password.");
+    }
+  });
+
+  const handleResetPassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPassword.trim()) {
+      setResetError("Password cannot be empty.");
+      return;
+    }
+    if (newPassword.length < 6) {
+      setResetError("Password must be at least 6 characters.");
+      return;
+    }
+    setResetError("");
+    resetPasswordMutation.mutate({ id: resettingUser!.id, newPassword });
+  };
 
   const handleCreateUser = (e: React.FormEvent) => {
     e.preventDefault();
@@ -220,17 +267,25 @@ export function UserManagement({ token }: { token: string }) {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => toggleStatusMutation.mutate({ id: u.id, isActive: u.is_active })}
-                      disabled={u.email === "admin@knowledgehub.local"}
-                      className={`text-xs font-semibold px-2.5 py-1 rounded transition disabled:opacity-40 ${
-                        u.is_active
-                          ? "text-red-600 bg-red-50 hover:bg-red-100"
-                          : "text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
-                      }`}
-                    >
-                      {u.is_active ? "Deactivate" : "Activate"}
-                    </button>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => setResettingUser(u)}
+                        className="text-xs font-semibold px-2.5 py-1 rounded transition text-slate-600 bg-slate-50 hover:bg-slate-100 border border-line"
+                      >
+                        Reset Password
+                      </button>
+                      <button
+                        onClick={() => toggleStatusMutation.mutate({ id: u.id, isActive: u.is_active })}
+                        disabled={u.email === "admin@knowledgehub.local"}
+                        className={`text-xs font-semibold px-2.5 py-1 rounded transition disabled:opacity-40 ${
+                          u.is_active
+                            ? "text-red-600 bg-red-50 hover:bg-red-100"
+                            : "text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
+                        }`}
+                      >
+                        {u.is_active ? "Deactivate" : "Activate"}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -238,6 +293,71 @@ export function UserManagement({ token }: { token: string }) {
           </table>
         </div>
       </div>
+
+      {resettingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg border border-line bg-white p-6 shadow-xl animate-in fade-in zoom-in-95 duration-150">
+            <h3 className="text-base font-semibold text-slate-900 mb-2">
+              Reset Password
+            </h3>
+            <p className="text-xs text-slate-500 mb-4">
+              Enter a new password for <span className="font-semibold">{resettingUser.full_name}</span> ({resettingUser.email}).
+            </p>
+            
+            <form onSubmit={handleResetPassword} className="space-y-4">
+              {resetError && (
+                <div className="rounded bg-red-50 p-2.5 text-xs text-red-700 border border-red-200 flex items-start gap-1.5">
+                  <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                  <span>{resetError}</span>
+                </div>
+              )}
+              {resetSuccess && (
+                <div className="rounded bg-emerald-50 p-2.5 text-xs text-emerald-700 border border-emerald-200">
+                  Password updated successfully!
+                </div>
+              )}
+              
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">New Password</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full h-9 px-3 rounded border border-line text-sm focus:border-brand focus:outline-none"
+                  placeholder="Minimum 6 characters"
+                  disabled={resetSuccess}
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResettingUser(null);
+                    setNewPassword("");
+                    setResetError("");
+                    setResetSuccess(false);
+                  }}
+                  className="h-9 px-4 rounded border border-line text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  {resetSuccess ? "Close" : "Cancel"}
+                </button>
+                {!resetSuccess && (
+                  <button
+                    type="submit"
+                    disabled={resetPasswordMutation.isPending}
+                    className="h-9 px-4 rounded bg-brand text-white text-sm font-medium hover:bg-brand/90 disabled:opacity-60 flex items-center gap-1.5"
+                  >
+                    {resetPasswordMutation.isPending && <Loader2 size={14} className="animate-spin" />}
+                    Save Password
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }

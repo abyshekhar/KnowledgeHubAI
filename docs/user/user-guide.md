@@ -28,5 +28,14 @@ Administrators can manage users by navigating to the **Users** tab:
 - **Create User**: Fill in Email, Full Name, Password, and Role, then click **Create User**.
 - **Role Assignment**: Change a user's role in real-time by selecting a role from the dropdown menu.
 - **Deactivate/Activate User**: Toggle a user's active status. Deactivated users are immediately blocked from logging in or calling API endpoints.
+- **Reset Password**: Click **Reset Password** on a user's row, type the new password, and click **Save Password**.
+
+## Changing Your Password
+
+All users, regardless of their role, can change their own password:
+1. Navigate to the **Settings** tab.
+2. Under the **Change Password** section, type your current password.
+3. Enter your new password and confirm it.
+4. Click **Update Password**. The new credentials will take effect immediately.
 
 

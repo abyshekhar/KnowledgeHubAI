@@ -44,6 +44,11 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
 @router.post("/register", response_model=TokenResponse)
 async def register(
     payload: RegisterRequest,
@@ -100,6 +105,22 @@ async def get_me(user: Annotated[User, Depends(get_current_user)]) -> dict:
         "full_name": user.full_name,
         "role": user.role.name if user.role else "user",
     }
+
+
+@router.post("/change-password")
+async def change_password(
+    payload: PasswordChangeRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, str]:
+    if not verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect"
+        )
+    user.password_hash = hash_password(payload.new_password)
+    await session.commit()
+    return {"status": "ok"}
 
 
 def _tokens(email: str, settings: Settings) -> TokenResponse:

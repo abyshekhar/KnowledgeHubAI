@@ -31,6 +31,7 @@ class UserUpdate(BaseModel):
     full_name: str | None = None
     role: str | None = None
     is_active: bool | None = None
+    password: str | None = None
 
 
 @router.get("")
@@ -84,6 +85,8 @@ async def update_user(
         role = await session.scalar(select(Role).where(Role.name == payload.role))
         if role is not None:
             user.role_id = role.id
+    if payload.password is not None:
+        user.password_hash = hash_password(payload.password)
     await session.commit()
     return {"status": "ok"}
 
