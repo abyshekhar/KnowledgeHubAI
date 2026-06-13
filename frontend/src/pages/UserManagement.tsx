@@ -34,6 +34,47 @@ export function UserManagement({ token }: { token: string }) {
     queryFn: () => api<Array<{ id: number; name: string; description: string | null }>>("/categories", token)
   });
 
+  const [editingCatId, setEditingCatId] = useState<number | null>(null);
+  const [editingCatName, setEditingCatName] = useState("");
+  const [editingCatDesc, setEditingCatDesc] = useState("");
+
+  const updateCategoryMutation = useMutation({
+    mutationFn: async ({ id, name, description }: { id: number; name: string; description: string | null }) => {
+      const response = await fetch(`/api/categories/${id}`, {
+        method: "PUT",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ name, description })
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      setEditingCatId(null);
+      categoriesQuery.refetch();
+    },
+    onError: (err: any) => {
+      let msg = "Failed to update category.";
+      try {
+        const parsed = JSON.parse(err.message);
+        if (parsed.detail) msg = parsed.detail;
+      } catch {
+        if (err.message) msg = err.message;
+      }
+      alert(msg);
+    }
+  });
+
+  const startEditingCategory = (cat: { id: number; name: string; description: string | null }) => {
+    setEditingCatId(cat.id);
+    setEditingCatName(cat.name);
+    setEditingCatDesc(cat.description || "");
+  };
+
   const usersQuery = useQuery({
     queryKey: ["users"],
     queryFn: () => api<UserRow[]>("/users", token)
@@ -441,22 +482,68 @@ export function UserManagement({ token }: { token: string }) {
                   </tr>
                 ) : (categoriesQuery.data ?? []).map((cat) => (
                   <tr key={cat.id} className="border-t border-line hover:bg-slate-50/40">
-                    <td className="px-4 py-3 font-medium text-slate-700">{cat.name}</td>
-                    <td className="px-4 py-3 text-slate-600">{cat.description || "-"}</td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => {
-                          if (confirm(`Are you sure you want to delete category "${cat.name}"?`)) {
-                            deleteCategoryMutation.mutate(cat.id);
-                          }
-                        }}
-                        disabled={["General", "HR", "Project-Specific", "Finance"].includes(cat.name)}
-                        className="text-xs font-semibold px-2.5 py-1 rounded transition text-red-600 bg-red-50 hover:bg-red-100 disabled:opacity-45"
-                        title={["General", "HR", "Project-Specific", "Finance"].includes(cat.name) ? "Protected system category" : "Delete category"}
-                      >
-                        Delete
-                      </button>
-                    </td>
+                    {editingCatId === cat.id ? (
+                      <>
+                        <td className="px-4 py-2">
+                          <input
+                            type="text"
+                            value={editingCatName}
+                            onChange={(e) => setEditingCatName(e.target.value)}
+                            className="h-8 w-full px-2 rounded border border-line text-sm focus:border-brand focus:outline-none"
+                          />
+                        </td>
+                        <td className="px-4 py-2">
+                          <input
+                            type="text"
+                            value={editingCatDesc}
+                            onChange={(e) => setEditingCatDesc(e.target.value)}
+                            className="h-8 w-full px-2 rounded border border-line text-sm focus:border-brand focus:outline-none"
+                          />
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => updateCategoryMutation.mutate({ id: cat.id, name: editingCatName, description: editingCatDesc || null })}
+                              className="text-xs font-semibold px-2.5 py-1 rounded transition text-white bg-brand hover:bg-brand/90"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setEditingCatId(null)}
+                              className="text-xs font-semibold px-2.5 py-1 rounded transition text-slate-600 bg-slate-50 border border-line hover:bg-slate-100"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-4 py-3 font-medium text-slate-700">{cat.name}</td>
+                        <td className="px-4 py-3 text-slate-600">{cat.description || "-"}</td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => startEditingCategory(cat)}
+                              className="text-xs font-semibold px-2.5 py-1 rounded transition text-slate-600 bg-slate-50 hover:bg-slate-100 border border-line"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (confirm(`Are you sure you want to delete category "${cat.name}"?`)) {
+                                  deleteCategoryMutation.mutate(cat.id);
+                                }
+                              }}
+                              className="text-xs font-semibold px-2.5 py-1 rounded transition text-red-600 bg-red-50 hover:bg-red-100 border border-red-200"
+                              title="Delete category"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>

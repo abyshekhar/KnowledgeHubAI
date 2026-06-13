@@ -5,7 +5,14 @@ from fastapi import HTTPException
 from unittest.mock import AsyncMock, MagicMock
 
 from backend.app.infrastructure.database.models import Category
-from backend.app.presentation.api.routes.categories import list_categories, create_category, delete_category, CategoryCreate
+from backend.app.presentation.api.routes.categories import (
+    list_categories,
+    create_category,
+    update_category,
+    delete_category,
+    CategoryCreate,
+    CategoryUpdate,
+)
 
 
 @pytest.mark.asyncio
@@ -68,6 +75,54 @@ async def test_delete_category_not_found() -> None:
     
     with pytest.raises(HTTPException) as exc_info:
         await delete_category(category_id=1, session=session)
+        
+    assert exc_info.value.status_code == 404
+    session.commit.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_update_category_success() -> None:
+    session = AsyncMock()
+    cat = Category(name="OldName", description="OldDesc")
+    session.get.return_value = cat
+    session.scalar.return_value = None
+    
+    # We update both name and description
+    payload = CategoryUpdate(name="NewName", description="NewDesc")
+    res = await update_category(category_id=1, payload=payload, session=session)
+    
+    assert res == {"status": "ok"}
+    assert cat.name == "NewName"
+    assert cat.description == "NewDesc"
+    session.commit.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_update_category_conflict() -> None:
+    session = AsyncMock()
+    cat = Category(name="OldName", description="OldDesc")
+    session.get.return_value = cat
+    
+    # Simulate database returning another category with the same target name
+    session.scalar.return_value = Category(name="ExistingTargetName")
+    
+    payload = CategoryUpdate(name="ExistingTargetName")
+    with pytest.raises(HTTPException) as exc_info:
+        await update_category(category_id=1, payload=payload, session=session)
+        
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "Category name already exists"
+    session.commit.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_update_category_not_found() -> None:
+    session = AsyncMock()
+    session.get.return_value = None
+    
+    payload = CategoryUpdate(name="NewName")
+    with pytest.raises(HTTPException) as exc_info:
+        await update_category(category_id=1, payload=payload, session=session)
         
     assert exc_info.value.status_code == 404
     session.commit.assert_not_called()

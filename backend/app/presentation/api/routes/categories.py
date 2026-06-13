@@ -53,6 +53,39 @@ async def create_category(
     return {"id": category.id, "name": category.name, "description": category.description}
 
 
+class CategoryUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
+@router.put("/{category_id}", dependencies=[Depends(require_roles("admin"))])
+async def update_category(
+    category_id: int,
+    payload: CategoryUpdate,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, str]:
+    category = await session.get(Category, category_id)
+    if category is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    if payload.name is not None:
+        existing = await session.scalar(
+            select(Category).where(Category.name == payload.name, Category.id != category_id)
+        )
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Category name already exists"
+            )
+        category.name = payload.name
+        
+    if payload.description is not None:
+        category.description = payload.description
+        
+    await session.commit()
+    return {"status": "ok"}
+
+
 @router.delete("/{category_id}", dependencies=[Depends(require_roles("admin"))])
 async def delete_category(
     category_id: int,
