@@ -16,3 +16,6 @@ class QdrantVectorStore(VectorStore):
     ) -> list[VectorSearchResult]:
         raise RuntimeError("Qdrant support requires an external local Qdrant deployment.")
 
+    def delete_document(self, document_name: str) -> None:
+        raise RuntimeError("Qdrant support requires an external local Qdrant deployment.")
+

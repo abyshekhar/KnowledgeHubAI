@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { Upload } from "lucide-react";
+import { Upload, Trash2 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { PageHeader } from "../components/PageHeader";
@@ -31,6 +31,24 @@ export function KnowledgeBase({ token }: { token: string }) {
           "Authorization": `Bearer ${token}`
         },
         body: formData
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      documents.refetch();
+    }
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const response = await fetch(`/api/documents/${id}`, {
+        method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
       });
       if (!response.ok) {
         throw new Error(await response.text());
@@ -87,6 +105,7 @@ export function KnowledgeBase({ token }: { token: string }) {
               <th className="px-4 py-3">Type</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Access</th>
+              <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -96,6 +115,19 @@ export function KnowledgeBase({ token }: { token: string }) {
                 <td className="px-4 py-3">{document.document_type}</td>
                 <td className="px-4 py-3">{document.status}</td>
                 <td className="px-4 py-3">{document.access_level}</td>
+                <td className="px-4 py-3 text-right">
+                  <button
+                    onClick={() => {
+                      if (confirm(`Are you sure you want to delete "${document.name}"?`)) {
+                        deleteMutation.mutate(document.id);
+                      }
+                    }}
+                    className="text-red-500 hover:text-red-700"
+                    title="Delete document"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>

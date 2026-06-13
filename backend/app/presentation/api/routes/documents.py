@@ -4,12 +4,12 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.application.documents.ingest_document import IngestDocumentUseCase
 from backend.app.config.settings import Settings
-from backend.app.infrastructure.database.models import Document, User
+from backend.app.infrastructure.database.models import Chunk, Document, User
 from backend.app.presentation.api.dependencies import get_current_user, get_session, get_settings, require_roles
 
 router = APIRouter()
@@ -70,9 +70,19 @@ async def list_documents(
 
 
 @router.delete("/{document_id}", dependencies=[Depends(require_roles("admin", "knowledge_manager"))])
-async def delete_document(document_id: int, session: Annotated[AsyncSession, Depends(get_session)]) -> dict:
+async def delete_document(
+    document_id: int,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> dict:
     document = await session.get(Document, document_id)
     if document:
+        from backend.app.infrastructure.vectorstores.factory import create_vector_store
+
+        vector_store = create_vector_store(settings.vector_store)
+        vector_store.delete_document(document.name)
+
+        await session.execute(delete(Chunk).where(Chunk.document_id == document.id))
         await session.delete(document)
         await session.commit()
     return {"status": "ok"}

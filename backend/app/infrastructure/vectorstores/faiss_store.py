@@ -73,3 +73,43 @@ class FaissVectorStore(VectorStore):
                     continue
             results.append(VectorSearchResult(chunk, float(score)))
         return results
+
+    def delete_document(self, document_name: str) -> None:
+        import faiss
+
+        if self._index is None or not self._chunks:
+            return
+
+        keep_indices = []
+        keep_chunks = []
+        for idx, chunk in enumerate(self._chunks):
+            if chunk.document_name != document_name:
+                keep_indices.append(idx)
+                keep_chunks.append(chunk)
+
+        if not keep_chunks:
+            self._chunks = []
+            self._index = None
+            if self.index_path.exists():
+                self.index_path.unlink()
+            if self.metadata_path.exists():
+                self.metadata_path.unlink()
+            return
+
+        vectors = []
+        for idx in keep_indices:
+            vector = self._index.reconstruct(idx)
+            vectors.append(vector)
+
+        matrix = np.asarray(vectors, dtype="float32")
+        new_index = faiss.IndexFlatIP(matrix.shape[1])
+        new_index.add(matrix)
+
+        self._index = new_index
+        self._chunks = keep_chunks
+
+        faiss.write_index(self._index, str(self.index_path))
+        self.metadata_path.write_text(
+            json.dumps([chunk.__dict__ for chunk in self._chunks], indent=2),
+            encoding="utf-8",
+        )

@@ -103,3 +103,20 @@ def test_reranker_fallback(mock_load):
     reranked = reranker.rerank("query", results)
     assert len(reranked) == 1
     assert reranked[0].chunk.text == "Test chunk"
+
+
+def test_faiss_delete_document(tmp_path):
+    from backend.app.infrastructure.vectorstores.faiss_store import FaissVectorStore
+    
+    store = FaissVectorStore(str(tmp_path))
+    chunk1 = DocumentChunk(text="Hello", document_name="doc1.pdf", document_type="pdf")
+    chunk2 = DocumentChunk(text="World", document_name="doc2.pdf", document_type="pdf")
+    
+    store.add_documents([chunk1, chunk2], [[0.1]*384, [0.2]*384])
+    assert len(store._chunks) == 2
+    
+    # Delete doc1
+    store.delete_document("doc1.pdf")
+    assert len(store._chunks) == 1
+    assert store._chunks[0].text == "World"
+

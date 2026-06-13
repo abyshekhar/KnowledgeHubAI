@@ -25,3 +25,7 @@ class VectorStore(ABC):
     ) -> list[VectorSearchResult]:
         raise NotImplementedError
 
+    @abstractmethod
+    def delete_document(self, document_name: str) -> None:
+        raise NotImplementedError
+
