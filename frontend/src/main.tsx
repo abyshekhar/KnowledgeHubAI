@@ -14,7 +14,7 @@ const client = new QueryClient();
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem("knowledgehub_token") ?? "");
-  const [page, setPage] = useState("dashboard");
+  const [page, setPage] = useState(localStorage.getItem("knowledgehub_page") ?? "dashboard");
   const auth = useMemo(
     () => ({
       token,
@@ -38,8 +38,18 @@ function App() {
     settings: <Settings />
   };
 
+  const handleNavigate = (nextPage: string) => {
+    localStorage.setItem("knowledgehub_page", nextPage);
+    setPage(nextPage);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("knowledgehub_page");
+    auth.setToken("");
+  };
+
   return (
-    <AppLayout activePage={page} onNavigate={setPage} onLogout={() => auth.setToken("")}>
+    <AppLayout activePage={page} onNavigate={handleNavigate} onLogout={handleLogout}>
       {pages[page]}
     </AppLayout>
   );

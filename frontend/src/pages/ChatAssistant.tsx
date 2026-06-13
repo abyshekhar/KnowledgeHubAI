@@ -20,12 +20,22 @@ export function ChatAssistant({ token }: { token: string }) {
     const current = question;
     setQuestion("");
     setMessages((items) => [...items, { role: "user", content: current }]);
-    const response = await api<ChatResponse>("/chat/query", token, {
-      method: "POST",
-      body: JSON.stringify({ question: current, conversation_id: conversationId })
-    });
-    setConversationId(response.conversation_id);
-    setMessages((items) => [...items, { role: "assistant", content: response.answer, sources: response.sources }]);
+    try {
+      const response = await api<ChatResponse>("/chat/query", token, {
+        method: "POST",
+        body: JSON.stringify({ question: current, conversation_id: conversationId })
+      });
+      setConversationId(response.conversation_id);
+      setMessages((items) => [...items, { role: "assistant", content: response.answer, sources: response.sources }]);
+    } catch (error) {
+      setMessages((items) => [
+        ...items,
+        {
+          role: "assistant",
+          content: "An error occurred while communicating with the assistant. Make sure the backend and local model runtime (Ollama) are active."
+        }
+      ]);
+    }
   }
 
   return (
