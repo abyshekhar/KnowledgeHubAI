@@ -2,7 +2,7 @@ app:
   name: KnowledgeHub AI
   environment: development
   secret_key: change-this-secret-before-production
-  access_token_minutes: 30
+  access_token_minutes: 1440
   refresh_token_days: 7
   upload_dir: data/uploads
   index_dir: data/indexes
