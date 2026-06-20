@@ -22,18 +22,19 @@
 
 ---
 
-KnowledgeHub AI is a fully offline, self-hosted, enterprise-grade AI Knowledge Assistant designed to let organizations chat securely with internal document bases (PDF, DOCX, Markdown, and TXT) using natural language.
+KnowledgeHub AI is a fully offline, self-hosted, enterprise-grade AI Knowledge Assistant designed to let organizations chat securely with internal document bases (PDF, DOCX, Markdown, TXT, and Web/Wiki links) using natural language.
 
 ---
 
 ## Key Highlights
 
 - **100% Offline-Capable**: Fully runs on a single local machine or corporate server without sending data to external APIs (no OpenAI, no Azure, no third-party cloud dependency).
+- **Web Links Integration**: Index external/internal web links (Confluence, SharePoint, Notion, custom HTML pages) directly into the knowledge base. Add, update, and remove links via the admin panel. Includes built-in Server-Side Request Forgery (SSRF) protection.
 - **Clean Architecture & Enterprise Patterns**: Strongly separated into presentation, application, domain, infrastructure, and configuration layers.
 - **Advanced Chunking Pipeline**: Supports recursive character chunking, structural section-aware chunking, and similarity-based semantic sentence chunking.
 - **Hybrid Retrieval System**: Combines FAISS dense semantic search and BM25 sparse keyword-based search with linear score blending (`hybrid_alpha`) and CrossEncoder rerankers.
 - **Security & Access Control**: Features JWT session/refresh tokens, Role-Based Access Control (Admin, Knowledge Manager, and User), and access level document filtering.
-- **FastAPI + React/Vite Admin Console**: Modern responsive dashboard, document upload manager, conversational chat assistant, and user management UI.
+- **FastAPI + React/Vite Admin Console**: Modern responsive dashboard, document upload manager, wiki link indexer, conversational chat assistant, and user management UI.
 
 ### Why KnowledgeHub AI?
 

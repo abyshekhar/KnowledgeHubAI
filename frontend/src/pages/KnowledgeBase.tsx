@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from "react";
-import { Upload, Trash2, Loader2, AlertCircle } from "lucide-react";
+import { Upload, Trash2, Loader2, AlertCircle, Globe, FileText, Edit, Plus } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { PageHeader } from "../components/PageHeader";
@@ -7,6 +7,7 @@ import { PageHeader } from "../components/PageHeader";
 type DocumentRow = {
   id: number;
   name: string;
+  path?: string;
   document_type: string;
   status: string;
   access_level: string;
@@ -18,6 +19,14 @@ export function KnowledgeBase({ token }: { token: string }) {
   const [uploadingFileName, setUploadingFileName] = useState<string | null>(null);
   const [uploadCategory, setUploadCategory] = useState<string>("General");
 
+  // Web link state variables
+  const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const [editingLink, setEditingLink] = useState<DocumentRow | null>(null);
+  const [linkName, setLinkName] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkCategory, setLinkCategory] = useState("General");
+  const [linkError, setLinkError] = useState("");
+
   const categoriesQuery = useQuery({
     queryKey: ["categories"],
     queryFn: () => api<Array<{ id: number; name: string; description: string | null }>>("/categories", token)
@@ -26,6 +35,7 @@ export function KnowledgeBase({ token }: { token: string }) {
   useEffect(() => {
     if (categoriesQuery.data && categoriesQuery.data.length > 0) {
       setUploadCategory(categoriesQuery.data[0].name);
+      setLinkCategory(categoriesQuery.data[0].name);
     }
   }, [categoriesQuery.data]);
 
@@ -82,6 +92,46 @@ export function KnowledgeBase({ token }: { token: string }) {
     },
     onSuccess: () => {
       documents.refetch();
+    }
+  });
+
+  const linkMutation = useMutation({
+    mutationFn: async (data: { id?: number; name: string; url: string; category: string }) => {
+      const isEdit = data.id !== undefined;
+      const url = isEdit ? `/api/documents/link/${data.id}` : "/api/documents/link";
+      const method = isEdit ? "PUT" : "POST";
+      const response = await fetch(url, {
+        method: method,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: data.name,
+          url: data.url,
+          category: data.category
+        })
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      setIsLinkModalOpen(false);
+      setEditingLink(null);
+      setLinkName("");
+      setLinkUrl("");
+      setLinkError("");
+      documents.refetch();
+    },
+    onError: (err: any) => {
+      try {
+        const errorData = JSON.parse(err.message);
+        setLinkError(errorData.detail || "An error occurred.");
+      } catch {
+        setLinkError(err.message || "An error occurred.");
+      }
     }
   });
 
@@ -176,8 +226,23 @@ export function KnowledgeBase({ token }: { token: string }) {
           accept=".pdf,.docx,.txt,.md"
         />
         <button
+          onClick={() => {
+            setEditingLink(null);
+            setLinkName("");
+            setLinkUrl("");
+            setLinkCategory(uploadCategory);
+            setLinkError("");
+            setIsLinkModalOpen(true);
+          }}
+          disabled={uploadMutation.isPending || linkMutation.isPending}
+          className="flex h-10 items-center gap-2 rounded-md bg-white border border-line px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-55 transition"
+        >
+          <Plus size={17} />
+          Add Web Link
+        </button>
+        <button
           onClick={handleUploadClick}
-          disabled={uploadMutation.isPending}
+          disabled={uploadMutation.isPending || linkMutation.isPending}
           className="flex h-10 items-center gap-2 rounded-md bg-brand px-4 text-sm font-medium text-white hover:bg-brand/90 disabled:opacity-55 transition"
         >
           {uploadMutation.isPending ? (
@@ -227,23 +292,60 @@ export function KnowledgeBase({ token }: { token: string }) {
             
             {(documents.data ?? []).map((document) => (
               <tr key={document.id} className="border-t border-line">
-                <td className="px-4 py-3 font-medium">{document.name}</td>
+                <td className="px-4 py-3 font-medium flex items-center gap-2">
+                  {document.document_type === "link" ? (
+                    <Globe size={16} className="text-blue-500 shrink-0" />
+                  ) : (
+                    <FileText size={16} className="text-slate-400 shrink-0" />
+                  )}
+                  {document.document_type === "link" ? (
+                    <a
+                      href={document.path}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-brand hover:underline truncate max-w-xs sm:max-w-md block"
+                      title={document.path}
+                    >
+                      {document.name}
+                    </a>
+                  ) : (
+                    <span className="truncate max-w-xs sm:max-w-md block">{document.name}</span>
+                  )}
+                </td>
                 <td className="px-4 py-3 uppercase">{document.document_type}</td>
                 <td className="px-4 py-3">{document.category || "General"}</td>
                 <td className="px-4 py-3">{getStatusBadge(document.status)}</td>
                 <td className="px-4 py-3">{document.access_level}</td>
                 <td className="px-4 py-3 text-right">
-                  <button
-                    onClick={() => {
-                      if (confirm(`Are you sure you want to delete "${document.name}"?`)) {
-                        deleteMutation.mutate(document.id);
-                      }
-                    }}
-                    className="text-red-500 hover:text-red-700 p-1"
-                    title="Delete document"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  <div className="flex justify-end gap-2 items-center">
+                    {document.document_type === "link" && (
+                      <button
+                        onClick={() => {
+                          setEditingLink(document);
+                          setLinkName(document.name);
+                          setLinkUrl(document.path || "");
+                          setLinkCategory(document.category || "General");
+                          setLinkError("");
+                          setIsLinkModalOpen(true);
+                        }}
+                        className="text-slate-500 hover:text-slate-700 p-1"
+                        title="Edit web link"
+                      >
+                        <Edit size={16} />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        if (confirm(`Are you sure you want to delete "${document.name}"?`)) {
+                          deleteMutation.mutate(document.id);
+                        }
+                      }}
+                      className="text-red-500 hover:text-red-700 p-1"
+                      title="Delete document"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -251,13 +353,110 @@ export function KnowledgeBase({ token }: { token: string }) {
             {!uploadingFileName && (documents.data ?? []).length === 0 && (
               <tr className="border-t border-line">
                 <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
-                  No documents found. Click the Upload button to add files.
+                  No documents found. Click the Upload or Add Web Link button to add resources.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {isLinkModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg border border-line bg-white p-6 shadow-xl animate-in fade-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+              <Globe size={18} className="text-brand" />
+              {editingLink ? "Edit Web Link" : "Add Web Link"}
+            </h3>
+            
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (!linkName.trim()) {
+                setLinkError("Display Name is required.");
+                return;
+              }
+              if (!linkUrl.trim()) {
+                setLinkError("URL Link is required.");
+                return;
+              }
+              try {
+                new URL(linkUrl);
+              } catch (_) {
+                setLinkError("Please enter a valid HTTP/HTTPS URL.");
+                return;
+              }
+              linkMutation.mutate({
+                id: editingLink?.id,
+                name: linkName.trim(),
+                url: linkUrl.trim(),
+                category: linkCategory
+              });
+            }} className="space-y-4">
+              {linkError && (
+                <div className="rounded bg-red-50 p-3 text-xs text-red-700 border border-red-200 flex items-start gap-1">
+                  <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                  <span>{linkError}</span>
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">Display Name</label>
+                <input
+                  type="text"
+                  value={linkName}
+                  onChange={(e) => setLinkName(e.target.value)}
+                  className="w-full h-10 px-3 rounded border border-line text-sm focus:border-brand focus:outline-none"
+                  placeholder="e.g. Engineering Wiki"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">URL Link</label>
+                <input
+                  type="text"
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  className="w-full h-10 px-3 rounded border border-line text-sm focus:border-brand focus:outline-none"
+                  placeholder="https://wiki.organization.com/page"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">Category</label>
+                <select
+                  value={linkCategory}
+                  onChange={(e) => setLinkCategory(e.target.value)}
+                  className="w-full h-10 px-2 rounded border border-line bg-white text-sm focus:border-brand focus:outline-none"
+                >
+                  {(categoriesQuery.data ?? []).map((cat) => (
+                    <option key={cat.id} value={cat.name}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsLinkModalOpen(false);
+                    setEditingLink(null);
+                    setLinkName("");
+                    setLinkUrl("");
+                    setLinkError("");
+                  }}
+                  className="h-10 px-4 rounded border border-line text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={linkMutation.isPending}
+                  className="flex h-10 items-center justify-center gap-2 rounded bg-brand px-4 text-sm font-medium text-white hover:bg-brand/90 disabled:opacity-60 transition"
+                >
+                  {linkMutation.isPending && <Loader2 size={16} className="animate-spin" />}
+                  {editingLink ? "Save Changes" : "Add Link"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }

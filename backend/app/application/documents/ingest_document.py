@@ -20,8 +20,23 @@ class IngestDocumentUseCase:
         self.session = session
 
     async def execute(self, document: Document) -> None:
-        parser = DocumentParser()
-        parsed = parser.parse(Path(document.path))
+        if document.document_type == "link":
+            import httpx
+            from backend.app.infrastructure.documents.parsers import WebHTMLParser, ParsedPage
+
+            async with httpx.AsyncClient() as client:
+                response = await client.get(document.path, follow_redirects=True, timeout=15.0)
+                response.raise_for_status()
+                html_content = response.text
+
+            parser = WebHTMLParser()
+            parser.feed(html_content)
+            text = parser.get_text()
+            title = parser.title.strip() or document.name
+            parsed = [ParsedPage(text=text, section=title)]
+        else:
+            parser = DocumentParser()
+            parsed = parser.parse(Path(document.path))
         cleaned_text = clean_pages([page.text for page in parsed])
         cleaned_pages = [
             ParsedPage(text=text, page_number=page.page_number, section=page.section)

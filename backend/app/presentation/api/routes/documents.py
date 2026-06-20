@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from pydantic import BaseModel, HttpUrl
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +14,19 @@ from backend.app.infrastructure.database.models import Chunk, Document, User
 from backend.app.presentation.api.dependencies import get_current_user, get_session, get_settings, require_roles
 
 router = APIRouter()
+
+
+class LinkCreateRequest(BaseModel):
+    name: str
+    url: HttpUrl
+    category: str | None = None
+
+
+class LinkUpdateRequest(BaseModel):
+    name: str | None = None
+    url: HttpUrl | None = None
+    category: str | None = None
+
 
 
 @router.post("/upload", dependencies=[Depends(require_roles("admin", "knowledge_manager"))])
@@ -61,6 +75,7 @@ async def list_documents(
         {
             "id": item.id,
             "name": item.name,
+            "path": item.path,
             "document_type": item.document_type,
             "status": item.status,
             "category": item.category,
@@ -69,6 +84,82 @@ async def list_documents(
         }
         for item in documents
     ]
+
+
+@router.post("/link", dependencies=[Depends(require_roles("admin", "knowledge_manager"))])
+async def add_link(
+    request: LinkCreateRequest,
+    background_tasks: BackgroundTasks,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    from backend.app.shared.validation import validate_url_security
+    try:
+        validate_url_security(str(request.url))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    document = Document(
+        name=request.name,
+        path=str(request.url),
+        document_type="link",
+        status="pending",
+        uploaded_by_id=user.id,
+        category=request.category,
+    )
+    session.add(document)
+    await session.commit()
+    await session.refresh(document)
+    background_tasks.add_task(_index_document, document.id, settings)
+    return {"id": document.id, "status": "queued"}
+
+
+@router.put("/link/{document_id}", dependencies=[Depends(require_roles("admin", "knowledge_manager"))])
+async def update_link(
+    document_id: int,
+    request: LinkUpdateRequest,
+    background_tasks: BackgroundTasks,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> dict:
+    document = await session.get(Document, document_id)
+    if not document or document.document_type != "link":
+        raise HTTPException(status_code=404, detail="Link not found")
+
+    url_changed = request.url is not None and str(request.url) != document.path
+    name_changed = request.name is not None and request.name != document.name
+    category_changed = request.category is not None and request.category != document.category
+
+    if url_changed:
+        from backend.app.shared.validation import validate_url_security
+        try:
+            validate_url_security(str(request.url))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    # If key details changed, clear old indexed data so it is correctly re-indexed
+    if url_changed or name_changed or category_changed:
+        from backend.app.infrastructure.vectorstores.factory import create_vector_store
+        vector_store = create_vector_store(settings.vector_store)
+        vector_store.delete_document(document.name)
+        await session.execute(delete(Chunk).where(Chunk.document_id == document.id))
+        document.status = "pending"
+
+    if request.name is not None:
+        document.name = request.name
+    if request.url is not None:
+        document.path = str(request.url)
+    if request.category is not None:
+        document.category = request.category
+
+    await session.commit()
+    await session.refresh(document)
+
+    if document.status == "pending":
+        background_tasks.add_task(_index_document, document.id, settings)
+
+    return {"id": document.id, "status": document.status}
 
 
 @router.delete("/{document_id}", dependencies=[Depends(require_roles("admin", "knowledge_manager"))])
