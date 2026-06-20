@@ -12,6 +12,7 @@ type DocumentRow = {
   status: string;
   access_level: string;
   category?: string;
+  tags?: string;
 };
 
 export function KnowledgeBase({ token }: { token: string }) {
@@ -25,6 +26,9 @@ export function KnowledgeBase({ token }: { token: string }) {
   const [linkName, setLinkName] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [linkCategory, setLinkCategory] = useState("General");
+  const [linkDepth, setLinkDepth] = useState<number>(0);
+  const [linkMaxPages, setLinkMaxPages] = useState<number>(10);
+  const [linkJsRender, setLinkJsRender] = useState<boolean>(false);
   const [linkError, setLinkError] = useState("");
 
   const categoriesQuery = useQuery({
@@ -96,7 +100,7 @@ export function KnowledgeBase({ token }: { token: string }) {
   });
 
   const linkMutation = useMutation({
-    mutationFn: async (data: { id?: number; name: string; url: string; category: string }) => {
+    mutationFn: async (data: { id?: number; name: string; url: string; category: string; depth: number; max_pages: number; js_render: boolean }) => {
       const isEdit = data.id !== undefined;
       const url = isEdit ? `/api/documents/link/${data.id}` : "/api/documents/link";
       const method = isEdit ? "PUT" : "POST";
@@ -109,7 +113,10 @@ export function KnowledgeBase({ token }: { token: string }) {
         body: JSON.stringify({
           name: data.name,
           url: data.url,
-          category: data.category
+          category: data.category,
+          depth: data.depth,
+          max_pages: data.max_pages,
+          js_render: data.js_render
         })
       });
       if (!response.ok) {
@@ -122,6 +129,9 @@ export function KnowledgeBase({ token }: { token: string }) {
       setEditingLink(null);
       setLinkName("");
       setLinkUrl("");
+      setLinkDepth(0);
+      setLinkMaxPages(10);
+      setLinkJsRender(false);
       setLinkError("");
       documents.refetch();
     },
@@ -150,33 +160,37 @@ export function KnowledgeBase({ token }: { token: string }) {
   };
 
   const getStatusBadge = (status: string) => {
-    switch (status.toLowerCase()) {
-      case "indexed":
-        return (
-          <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/10">
-            Indexed
-          </span>
-        );
-      case "pending":
-      case "processing":
-        return (
-          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-700/10 animate-pulse">
-            <Loader2 size={10} className="animate-spin text-blue-500" />
-            Indexing...
-          </span>
-        );
-      case "failed":
-        return (
-          <span className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-700 ring-1 ring-inset ring-red-600/10">
-            Failed
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-0.5 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-500/10">
-            {status}
-          </span>
-        );
+    const isFailed = status.toLowerCase().startsWith("failed");
+    const errorDetails = isFailed && status.includes(":") ? status.substring(status.indexOf(":") + 1).trim() : null;
+
+    if (status.toLowerCase() === "indexed") {
+      return (
+        <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/10">
+          Indexed
+        </span>
+      );
+    } else if (status.toLowerCase() === "pending" || status.toLowerCase() === "processing") {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-700/10 animate-pulse">
+          <Loader2 size={10} className="animate-spin text-blue-500" />
+          Indexing...
+        </span>
+      );
+    } else if (isFailed) {
+      return (
+        <span 
+          className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-700 ring-1 ring-inset ring-red-600/10 cursor-help"
+          title={errorDetails || "Ingestion failed"}
+        >
+          Failed
+        </span>
+      );
+    } else {
+      return (
+        <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-0.5 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-500/10">
+          {status}
+        </span>
+      );
     }
   };
 
@@ -231,6 +245,9 @@ export function KnowledgeBase({ token }: { token: string }) {
             setLinkName("");
             setLinkUrl("");
             setLinkCategory(uploadCategory);
+            setLinkDepth(0);
+            setLinkMaxPages(10);
+            setLinkJsRender(false);
             setLinkError("");
             setIsLinkModalOpen(true);
           }}
@@ -326,6 +343,16 @@ export function KnowledgeBase({ token }: { token: string }) {
                           setLinkUrl(document.path || "");
                           setLinkCategory(document.category || "General");
                           setLinkError("");
+                          try {
+                            const meta = JSON.parse(document.tags || "{}");
+                            setLinkDepth(meta.depth || 0);
+                            setLinkMaxPages(meta.max_pages || 10);
+                            setLinkJsRender(!!meta.js_render);
+                          } catch {
+                            setLinkDepth(0);
+                            setLinkMaxPages(10);
+                            setLinkJsRender(false);
+                          }
                           setIsLinkModalOpen(true);
                         }}
                         className="text-slate-500 hover:text-slate-700 p-1"
@@ -389,7 +416,10 @@ export function KnowledgeBase({ token }: { token: string }) {
                 id: editingLink?.id,
                 name: linkName.trim(),
                 url: linkUrl.trim(),
-                category: linkCategory
+                category: linkCategory,
+                depth: linkDepth,
+                max_pages: linkMaxPages,
+                js_render: linkJsRender
               });
             }} className="space-y-4">
               {linkError && (
@@ -418,6 +448,43 @@ export function KnowledgeBase({ token }: { token: string }) {
                   placeholder="https://wiki.organization.com/page"
                 />
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">Crawl Depth</label>
+                  <select
+                    value={linkDepth}
+                    onChange={(e) => setLinkDepth(parseInt(e.target.value))}
+                    className="w-full h-10 px-2 rounded border border-line bg-white text-sm focus:border-brand focus:outline-none"
+                  >
+                    <option value="0">0 (Single Page)</option>
+                    <option value="1">1 (Nested links level 1)</option>
+                    <option value="2">2 (Nested links level 2)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">Max Pages</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    value={linkMaxPages}
+                    onChange={(e) => setLinkMaxPages(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-full h-10 px-3 rounded border border-line text-sm focus:border-brand focus:outline-none"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="jsRenderCheckbox"
+                  checked={linkJsRender}
+                  onChange={(e) => setLinkJsRender(e.target.checked)}
+                  className="rounded border-slate-300 text-brand focus:ring-brand h-4 w-4"
+                />
+                <label htmlFor="jsRenderCheckbox" className="text-xs font-semibold text-slate-500 cursor-pointer">
+                  Render JavaScript (Dynamic browser loading)
+                </label>
+              </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-500 mb-1">Category</label>
                 <select
@@ -438,6 +505,9 @@ export function KnowledgeBase({ token }: { token: string }) {
                     setEditingLink(null);
                     setLinkName("");
                     setLinkUrl("");
+                    setLinkDepth(0);
+                    setLinkMaxPages(10);
+                    setLinkJsRender(false);
                     setLinkError("");
                   }}
                   className="h-10 px-4 rounded border border-line text-sm font-medium text-slate-600 hover:bg-slate-50 transition"

@@ -21,19 +21,88 @@ class IngestDocumentUseCase:
 
     async def execute(self, document: Document) -> None:
         if document.document_type == "link":
+            import json
+            import re
+            from urllib.parse import urljoin, urlparse
             import httpx
             from backend.app.infrastructure.documents.parsers import WebHTMLParser, ParsedPage
+            from backend.app.shared.validation import validate_url_security
 
-            async with httpx.AsyncClient() as client:
-                response = await client.get(document.path, follow_redirects=True, timeout=15.0)
-                response.raise_for_status()
-                html_content = response.text
+            # Parse metadata parameters from tags
+            try:
+                meta = json.loads(document.tags)
+                depth = meta.get("depth", 0)
+                max_pages = meta.get("max_pages", 10)
+                js_render = meta.get("js_render", False)
+            except Exception as e:
+                print(f"DEBUG: Exception parsing tags: {e}, document.tags: {document.tags}")
+                depth = 0
+                max_pages = 10
+                js_render = False
 
-            parser = WebHTMLParser()
-            parser.feed(html_content)
-            text = parser.get_text()
-            title = parser.title.strip() or document.name
-            parsed = [ParsedPage(text=text, section=title)]
+            visited = set()
+            queue = [(document.path, 0)]
+            parsed = []
+
+            base_parsed = urlparse(document.path)
+            base_domain = base_parsed.netloc
+
+            while queue and len(visited) < max_pages:
+                url, curr_depth = queue.pop(0)
+                if url in visited:
+                    continue
+                visited.add(url)
+
+                try:
+                    html_content = ""
+                    if js_render:
+                        try:
+                            from playwright.async_api import async_playwright
+                            async with async_playwright() as p:
+                                browser = await p.chromium.launch(headless=True)
+                                page = await browser.new_page()
+                                await page.goto(url, wait_until="networkidle", timeout=15000)
+                                html_content = await page.content()
+                                await browser.close()
+                        except Exception as js_err:
+                            # Fallback to standard httpx if playwright fails
+                            async with httpx.AsyncClient() as client:
+                                response = await client.get(url, follow_redirects=True, timeout=12.0)
+                                response.raise_for_status()
+                                html_content = response.text
+                    else:
+                        async with httpx.AsyncClient() as client:
+                            response = await client.get(url, follow_redirects=True, timeout=12.0)
+                            response.raise_for_status()
+                            html_content = response.text
+
+                    parser = WebHTMLParser()
+                    parser.feed(html_content)
+                    text = parser.get_text()
+                    title = parser.title.strip() or f"Page {len(visited)}"
+                    parsed.append(ParsedPage(text=text, section=title))
+
+                    # If we need to go deeper, extract links from the parsed page
+                    if curr_depth < depth:
+                        links = re.findall(r'href=["\'](.*?)["\']', html_content)
+                        for link in links:
+                            full_url = urljoin(url, link)
+                            link_parsed = urlparse(full_url)
+                            if link_parsed.netloc == base_domain and link_parsed.scheme in ("http", "https"):
+                                clean_url = full_url.split("#")[0]
+                                if clean_url not in visited:
+                                    try:
+                                        validate_url_security(clean_url)
+                                        queue.append((clean_url, curr_depth + 1))
+                                    except ValueError:
+                                        pass  # skip loopback or private sublinks
+                except Exception as page_err:
+                    # If the base URL fails, we raise so it registers as failed.
+                    # If nested links fail, we skip them and continue.
+                    if len(visited) <= 1:
+                        raise ValueError(f"Failed to load URL {url}: {str(page_err)}") from page_err
+                    else:
+                        continue
         else:
             parser = DocumentParser()
             parsed = parser.parse(Path(document.path))

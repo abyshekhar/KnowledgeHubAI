@@ -6,7 +6,7 @@ import { PageHeader } from "../components/PageHeader";
 
 type ChatResponse = {
   answer: string;
-  sources: Array<{ document_name: string; page_number: number | null; score: number }>;
+  sources: Array<{ document_name: string; page_number: number | null; score: number; text?: string }>;
   conversation_id: number;
 };
 
@@ -187,14 +187,33 @@ export function ChatAssistant({ token }: { token: string }) {
               >
                 <p className="whitespace-pre-wrap text-sm leading-6">{message.content}</p>
                 {message.sources?.length ? (
-                  <div className="mt-3 border-t border-line pt-2 text-xs text-slate-600">
-                    Sources:{" "}
-                    {message.sources
-                      .map(
-                        (source) =>
-                          `${source.document_name}${source.page_number ? ` p.${source.page_number}` : ""}`
-                      )
-                      .join(", ")}
+                  <div className="mt-3 border-t border-slate-200/60 pt-2 text-xs">
+                    <span className="font-semibold text-slate-500 block mb-1.5">Grounded Sources:</span>
+                    <div className="flex flex-wrap gap-2">
+                      {message.sources.map((source, sIdx) => (
+                        <div key={sIdx} className="group relative">
+                          <span className="inline-flex items-center gap-1 rounded bg-slate-200/70 hover:bg-slate-200 px-2 py-1 text-xs font-medium text-slate-700 cursor-help transition">
+                            <span className="truncate max-w-[150px]">{source.document_name}</span>
+                            {source.page_number && <span className="opacity-60 text-[10px]">p.{source.page_number}</span>}
+                            <span className="text-[10px] text-brand opacity-80">({Math.round(source.score * 100)}%)</span>
+                          </span>
+                          {/* Tooltip / Hover Snippet Card */}
+                          {source.text && (
+                            <div className="absolute bottom-full left-0 mb-2 w-80 scale-95 opacity-0 pointer-events-none group-hover:scale-100 group-hover:opacity-100 group-hover:pointer-events-auto origin-bottom-left transition-all duration-200 ease-out z-30">
+                              <div className="rounded-lg border border-line bg-white p-3 shadow-xl">
+                                <div className="text-[10px] font-semibold text-brand mb-1 flex justify-between">
+                                  <span>Snippet from {source.document_name}</span>
+                                  <span>Score: {Math.round(source.score * 100)}%</span>
+                                </div>
+                                <p className="text-[11px] text-slate-600 leading-normal max-h-32 overflow-y-auto whitespace-pre-wrap">
+                                  {source.text}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ) : null}
               </div>

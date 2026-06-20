@@ -103,6 +103,7 @@ class RAGService:
                 "page_number": item.chunk.page_number,
                 "section": item.chunk.section,
                 "score": item.score,
+                "text": item.chunk.text,
             }
             for item in accepted
         ]

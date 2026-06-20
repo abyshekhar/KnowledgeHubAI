@@ -20,12 +20,18 @@ class LinkCreateRequest(BaseModel):
     name: str
     url: HttpUrl
     category: str | None = None
+    depth: int = 0
+    max_pages: int = 10
+    js_render: bool = False
 
 
 class LinkUpdateRequest(BaseModel):
     name: str | None = None
     url: HttpUrl | None = None
     category: str | None = None
+    depth: int | None = None
+    max_pages: int | None = None
+    js_render: bool | None = None
 
 
 
@@ -81,6 +87,7 @@ async def list_documents(
             "category": item.category,
             "access_level": item.access_level,
             "created_at": item.created_at,
+            "tags": item.tags,
         }
         for item in documents
     ]
@@ -100,6 +107,13 @@ async def add_link(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    import json
+    metadata = {
+        "depth": request.depth,
+        "max_pages": request.max_pages,
+        "js_render": request.js_render
+    }
+
     document = Document(
         name=request.name,
         path=str(request.url),
@@ -107,6 +121,7 @@ async def add_link(
         status="pending",
         uploaded_by_id=user.id,
         category=request.category,
+        tags=json.dumps(metadata)
     )
     session.add(document)
     await session.commit()
@@ -138,8 +153,29 @@ async def update_link(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
+    # Parse current metadata from tags
+    import json
+    try:
+        meta = json.loads(document.tags)
+    except Exception:
+        meta = {}
+
+    tags_changed = False
+    if request.depth is not None and request.depth != meta.get("depth"):
+        meta["depth"] = request.depth
+        tags_changed = True
+    if request.max_pages is not None and request.max_pages != meta.get("max_pages"):
+        meta["max_pages"] = request.max_pages
+        tags_changed = True
+    if request.js_render is not None and request.js_render != meta.get("js_render"):
+        meta["js_render"] = request.js_render
+        tags_changed = True
+
+    if tags_changed:
+        document.tags = json.dumps(meta)
+
     # If key details changed, clear old indexed data so it is correctly re-indexed
-    if url_changed or name_changed or category_changed:
+    if url_changed or name_changed or category_changed or tags_changed:
         from backend.app.infrastructure.vectorstores.factory import create_vector_store
         vector_store = create_vector_store(settings.vector_store)
         vector_store.delete_document(document.name)
@@ -204,7 +240,7 @@ async def _index_document(document_id: int, settings: Settings) -> None:
         if document:
             try:
                 await IngestDocumentUseCase(settings, session).execute(document)
-            except Exception:
-                document.status = "failed"
+            except Exception as e:
+                document.status = f"failed: {str(e)}"
                 await session.commit()
 
