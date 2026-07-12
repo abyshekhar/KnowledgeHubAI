@@ -237,7 +237,7 @@ export function KnowledgeBase({ token }: { token: string }) {
           ref={fileInputRef}
           onChange={handleFileChange}
           className="hidden"
-          accept=".pdf,.docx,.txt,.md"
+          accept=".pdf,.docx,.txt,.md,.csv"
         />
         <button
           onClick={() => {

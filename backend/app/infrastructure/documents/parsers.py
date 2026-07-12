@@ -26,7 +26,25 @@ class DocumentParser:
             return self._parse_markdown(path)
         if suffix == ".txt":
             return [ParsedPage(path.read_text(encoding="utf-8", errors="ignore"))]
+        if suffix == ".csv":
+            return self._parse_csv(path)
         raise ValueError(f"Unsupported document type: {suffix}")
+
+    def _parse_csv(self, path: Path) -> list[ParsedPage]:
+        import csv
+        pages = []
+        with path.open("r", encoding="utf-8", errors="ignore") as f:
+            reader = csv.DictReader(f)
+            headers = reader.fieldnames or []
+            for index, row in enumerate(reader):
+                row_parts = []
+                for header in headers:
+                    val = row.get(header)
+                    if val is not None:
+                        row_parts.append(f"{header}: {val}")
+                row_text = ", ".join(row_parts)
+                pages.append(ParsedPage(row_text, page_number=index + 1))
+        return pages
 
     def _parse_pdf(self, path: Path) -> list[ParsedPage]:
         doc = fitz.open(path)

@@ -61,12 +61,13 @@ class ChunkingSettings(BaseModel):
 
 
 class SecuritySettings(BaseModel):
-    allowed_extensions: list[str] = [".pdf", ".docx", ".txt", ".md"]
+    allowed_extensions: list[str] = [".pdf", ".docx", ".txt", ".md", ".csv"]
     allowed_mime_types: list[str] = [
         "application/pdf",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "text/plain",
         "text/markdown",
+        "text/csv",
     ]
 
 
