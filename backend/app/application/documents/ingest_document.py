@@ -21,11 +21,10 @@ class IngestDocumentUseCase:
 
     async def execute(self, document: Document) -> None:
         if document.document_type == "link":
-            import json
             import re
             from urllib.parse import urljoin, urlparse
             import httpx
-            from backend.app.infrastructure.documents.parsers import WebHTMLParser, ParsedPage
+            from backend.app.infrastructure.documents.parsers import WebHTMLParser
             from backend.app.shared.validation import validate_url_security
 
             # Parse metadata parameters from tags
@@ -116,6 +115,8 @@ class IngestDocumentUseCase:
             document.name,
             document.document_type,
         )
+        if not chunks:
+            raise ValueError("No indexable text could be extracted from this document.")
         chunks = [
             type(chunk)(
                 text=chunk.text,

@@ -8,6 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from backend.app.infrastructure.database.models import Base
 
 
+from sqlalchemy import event, text
+
+_engines = {}
+
 def _ensure_sqlite_parent(url: str) -> None:
     if not url.startswith("sqlite"):
         return
@@ -18,14 +22,34 @@ def _ensure_sqlite_parent(url: str) -> None:
 
 def create_session_factory(url: str) -> async_sessionmaker[AsyncSession]:
     _ensure_sqlite_parent(url)
-    engine = create_async_engine(url, future=True)
-    return async_sessionmaker(engine, expire_on_commit=False)
+    if url not in _engines:
+        connect_args = {}
+        if url.startswith("sqlite"):
+            # Set timeout to 30s to prevent operational errors during concurrent writes
+            connect_args = {"timeout": 30.0}
+        engine = create_async_engine(url, future=True, connect_args=connect_args)
+        
+        if url.startswith("sqlite"):
+            # Set journal_mode to WAL and synchronous to NORMAL for high concurrency SQLite performance
+            @event.listens_for(engine.sync_engine, "connect")
+            def set_sqlite_pragma(dbapi_connection, connection_record):
+                cursor = dbapi_connection.cursor()
+                cursor.execute("PRAGMA journal_mode=WAL;")
+                cursor.execute("PRAGMA synchronous=NORMAL;")
+                cursor.close()
+                
+        _engines[url] = engine
+        
+    return async_sessionmaker(_engines[url], expire_on_commit=False)
 
 
 async def init_database(url: str) -> None:
     _ensure_sqlite_parent(url)
     engine = create_async_engine(url, future=True)
     async with engine.begin() as conn:
+        if url.startswith("sqlite"):
+            await conn.execute(text("PRAGMA journal_mode=WAL;"))
+            await conn.execute(text("PRAGMA synchronous=NORMAL;"))
         await conn.run_sync(Base.metadata.create_all)
     
     # Seed default roles and categories

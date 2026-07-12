@@ -212,6 +212,14 @@ async def delete_document(
         vector_store.delete_document(document.name)
 
         await session.execute(delete(Chunk).where(Chunk.document_id == document.id))
+        
+        # Delete local file from disk if it exists
+        if document.document_type != "link" and document.path:
+            try:
+                Path(document.path).unlink(missing_ok=True)
+            except Exception:
+                pass
+
         await session.delete(document)
         await session.commit()
     return {"status": "ok"}

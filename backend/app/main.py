@@ -12,11 +12,37 @@ from backend.app.infrastructure.logging.setup import configure_logging
 from backend.app.presentation.api.routes import analytics, auth, chat, documents, feedback, health, users, categories
 
 
+async def _process_pending_documents(settings) -> None:
+    from backend.app.infrastructure.database.session import create_session_factory
+    from backend.app.infrastructure.database.models import Document
+    from backend.app.presentation.api.routes.documents import _index_document
+    from sqlalchemy import select
+    import asyncio
+    
+    await asyncio.sleep(5.0)  # Wait 5 seconds to let server start up fully
+    session_factory = create_session_factory(settings.database.url)
+    async with session_factory() as session:
+        stmt = select(Document).where(Document.status.in_(["pending", "processing"]))
+        documents = (await session.scalars(stmt)).all()
+        if not documents:
+            return
+            
+        for doc in documents:
+            try:
+                await _index_document(doc.id, settings)
+            except Exception:
+                pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = load_settings()
     configure_logging(settings.app.environment)
     await init_database(settings.database.url)
+    
+    import asyncio
+    asyncio.create_task(_process_pending_documents(settings))
+    
     yield
 
 
