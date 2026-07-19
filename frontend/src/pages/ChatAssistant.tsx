@@ -10,7 +10,22 @@ type ChatResponse = {
   conversation_id: number;
 };
 
-export function ChatAssistant({ token }: { token: string }) {
+type LlmStatus = {
+  provider: string;
+  default_model: string;
+  running: boolean;
+  models: string[];
+};
+
+export function ChatAssistant({
+  token,
+  selectedModel,
+  onSelectModel
+}: {
+  token: string;
+  selectedModel: string;
+  onSelectModel: (model: string) => void;
+}) {
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<Array<{ role: string; content: string; sources?: ChatResponse["sources"] }>>([]);
   const [conversationId, setConversationId] = useState<number | null>(null);
@@ -22,6 +37,15 @@ export function ChatAssistant({ token }: { token: string }) {
     queryKey: ["categories"],
     queryFn: () => api<Array<{ id: number; name: string; description: string | null }>>("/categories", token)
   });
+
+  const llmStatusQuery = useQuery({
+    queryKey: ["llm-status"],
+    queryFn: () => api<LlmStatus>("/chat/models", token),
+    refetchInterval: 15000
+  });
+
+  const llmStatus = llmStatusQuery.data;
+  const activeModel = selectedModel || llmStatus?.default_model || "";
 
   // Auto scroll to bottom of chat
   useEffect(() => {
@@ -53,7 +77,8 @@ export function ChatAssistant({ token }: { token: string }) {
         body: JSON.stringify({
           question: current,
           conversation_id: conversationId,
-          category: categoryFilter === "All" ? null : categoryFilter
+          category: categoryFilter === "All" ? null : categoryFilter,
+          model: activeModel || null
         })
       });
       setConversationId(response.conversation_id);
@@ -156,18 +181,38 @@ export function ChatAssistant({ token }: { token: string }) {
 
         <section className="flex flex-col h-full bg-white min-h-0">
           <div className="flex items-center justify-between border-b border-line px-4 py-2 bg-slate-50/50">
-            <span className="text-xs font-medium text-slate-500">Filter Grounding Source:</span>
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              disabled={categoriesQuery.isLoading}
-              className="h-8 rounded-md border border-line bg-white px-2 py-1 text-xs text-slate-800 focus:border-brand focus:outline-none disabled:opacity-60"
-            >
-              <option value="All">All Categories</option>
-              {(categoriesQuery.data ?? []).map((cat) => (
-                <option key={cat.id} value={cat.name}>{cat.name}</option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-slate-500">Filter Grounding Source:</span>
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                disabled={categoriesQuery.isLoading}
+                className="h-8 rounded-md border border-line bg-white px-2 py-1 text-xs text-slate-800 focus:border-brand focus:outline-none disabled:opacity-60"
+              >
+                <option value="All">All Categories</option>
+                {(categoriesQuery.data ?? []).map((cat) => (
+                  <option key={cat.id} value={cat.name}>{cat.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2" title={llmStatus?.running ? "Local model runtime is running" : "Local model runtime is not reachable"}>
+              <span className={`h-1.5 w-1.5 rounded-full ${llmStatus?.running ? "bg-emerald-500" : "bg-red-500"}`} />
+              <span className="text-xs font-medium text-slate-500">Model:</span>
+              <select
+                value={activeModel}
+                onChange={(e) => onSelectModel(e.target.value)}
+                disabled={!llmStatus?.running || !llmStatus.models.length}
+                className="h-8 rounded-md border border-line bg-white px-2 py-1 text-xs text-slate-800 focus:border-brand focus:outline-none disabled:opacity-60"
+              >
+                {llmStatus?.running && llmStatus.models.length ? (
+                  llmStatus.models.map((model) => (
+                    <option key={model} value={model}>{model}</option>
+                  ))
+                ) : (
+                  <option value="">Unavailable</option>
+                )}
+              </select>
+            </div>
           </div>
 
           <div className="flex-1 space-y-4 overflow-y-auto p-4">

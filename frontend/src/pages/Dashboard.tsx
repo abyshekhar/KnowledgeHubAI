@@ -1,10 +1,25 @@
-import { Database, FileCheck, Files, MessageSquare, Users } from "lucide-react";
+import { FileCheck, Files, MessageSquare, Users } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { PageHeader } from "../components/PageHeader";
 import { StatTile } from "../components/StatTile";
 
-export function Dashboard({ token }: { token: string }) {
+type LlmStatus = {
+  provider: string;
+  default_model: string;
+  running: boolean;
+  models: string[];
+};
+
+export function Dashboard({
+  token,
+  selectedModel,
+  onSelectModel
+}: {
+  token: string;
+  selectedModel: string;
+  onSelectModel: (model: string) => void;
+}) {
   const { data: metrics } = useQuery({
     queryKey: ["dashboard-metrics"],
     queryFn: () =>
@@ -15,6 +30,15 @@ export function Dashboard({ token }: { token: string }) {
         feedback_count: number;
       }>("/analytics/dashboard", token)
   });
+
+  const llmStatusQuery = useQuery({
+    queryKey: ["llm-status"],
+    queryFn: () => api<LlmStatus>("/chat/models", token),
+    refetchInterval: 15000
+  });
+
+  const llmStatus = llmStatusQuery.data;
+  const activeModel = selectedModel || llmStatus?.default_model || "";
 
   return (
     <>
@@ -35,10 +59,50 @@ export function Dashboard({ token }: { token: string }) {
           </div>
         </div>
         <div className="rounded-md border border-line bg-white">
-          <div className="border-b border-line px-4 py-3 font-medium">Runtime</div>
-          <div className="flex items-center gap-3 p-4 text-sm">
-            <Database className="text-brand" size={18} />
-            SQLite + FAISS + Ollama
+          <div className="border-b border-line px-4 py-3 font-medium">Local Model Runtime</div>
+          <div className="space-y-3 p-4 text-sm">
+            <div className="flex items-center gap-2">
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${
+                  llmStatusQuery.isLoading
+                    ? "animate-pulse bg-slate-300"
+                    : llmStatus?.running
+                    ? "bg-emerald-500"
+                    : "bg-red-500"
+                }`}
+              />
+              <span className="font-medium">
+                {llmStatusQuery.isLoading
+                  ? "Checking local model runtime..."
+                  : llmStatus?.running
+                  ? `${llmStatus.provider} is running`
+                  : `${llmStatus?.provider ?? "Local model runtime"} is not reachable`}
+              </span>
+            </div>
+            {!llmStatusQuery.isLoading && !llmStatus?.running && (
+              <p className="text-xs text-slate-500">
+                Start Ollama locally (e.g. <code>ollama serve</code>) to enable chat answers.
+              </p>
+            )}
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-500">Chat model</label>
+              <select
+                value={activeModel}
+                onChange={(event) => onSelectModel(event.target.value)}
+                disabled={!llmStatus?.running || !llmStatus.models.length}
+                className="h-9 w-full rounded-md border border-line bg-white px-2 text-sm focus:border-brand focus:outline-none disabled:opacity-60"
+              >
+                {llmStatus?.running && llmStatus.models.length ? (
+                  llmStatus.models.map((model) => (
+                    <option key={model} value={model}>
+                      {model}
+                    </option>
+                  ))
+                ) : (
+                  <option value="">No models available</option>
+                )}
+              </select>
+            </div>
           </div>
         </div>
       </section>

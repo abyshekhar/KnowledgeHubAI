@@ -17,7 +17,13 @@ const client = new QueryClient();
 function App() {
   const [token, setToken] = useState(localStorage.getItem("knowledgehub_token") ?? "");
   const [page, setPage] = useState(localStorage.getItem("knowledgehub_page") ?? "dashboard");
-  
+  const [selectedModel, setSelectedModelState] = useState(localStorage.getItem("knowledgehub_model") ?? "");
+
+  const setSelectedModel = (value: string) => {
+    localStorage.setItem("knowledgehub_model", value);
+    setSelectedModelState(value);
+  };
+
   const auth = useMemo(
     () => ({
       token,
@@ -54,8 +60,8 @@ function App() {
   const userRole = profileQuery.data?.role?.toLowerCase() || "user";
 
   const pages: Record<string, React.ReactNode> = {
-    dashboard: <Dashboard token={token} />,
-    chat: <ChatAssistant token={token} />,
+    dashboard: <Dashboard token={token} selectedModel={selectedModel} onSelectModel={setSelectedModel} />,
+    chat: <ChatAssistant token={token} selectedModel={selectedModel} onSelectModel={setSelectedModel} />,
     settings: <Settings token={token} role={userRole} />,
     ...(userRole === "admin" || userRole === "knowledge_manager" ? {
       knowledge: <KnowledgeBase token={token} />,
@@ -78,7 +84,9 @@ function App() {
     auth.setToken("");
   };
 
-  const activePageNode = pages[page] || <Dashboard token={token} />;
+  const activePageNode = pages[page] || (
+    <Dashboard token={token} selectedModel={selectedModel} onSelectModel={setSelectedModel} />
+  );
 
   return (
     <AppLayout activePage={page} onNavigate={handleNavigate} onLogout={handleLogout} role={userRole}>

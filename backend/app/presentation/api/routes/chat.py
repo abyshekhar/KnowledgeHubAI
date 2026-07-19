@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.application.chat.rag_service import RAGService
 from backend.app.config.settings import Settings
+from backend.app.infrastructure.ai.providers import create_llm_provider
 from backend.app.infrastructure.database.models import Conversation, Message, User
 from backend.app.presentation.api.dependencies import get_current_user, get_session, get_settings
 
@@ -20,6 +21,7 @@ class ChatRequest(BaseModel):
     question: str
     conversation_id: int | None = None
     category: str | None = None
+    model: str | None = None
 
 
 @router.post("/query")
@@ -30,8 +32,25 @@ async def query(
     user: Annotated[User, Depends(get_current_user)],
 ) -> dict:
     return await RAGService(settings, session).answer(
-        payload.question, user, payload.conversation_id, payload.category
+        payload.question, user, payload.conversation_id, payload.category, payload.model
     )
+
+
+@router.get("/models")
+async def llm_status(
+    settings: Annotated[Settings, Depends(get_settings)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    del user  # authenticated access check only
+    provider = create_llm_provider(settings.llm)
+    running = await provider.check_health()
+    models = await provider.list_models() if running else []
+    return {
+        "provider": settings.llm.provider,
+        "default_model": settings.llm.model,
+        "running": running,
+        "models": models,
+    }
 
 
 @router.get("/history")

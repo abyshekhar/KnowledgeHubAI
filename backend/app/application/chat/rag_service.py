@@ -28,7 +28,14 @@ class RAGService:
         }
         return cleaned in greetings
 
-    async def answer(self, question: str, user: User, conversation_id: int | None = None, category: str | None = None) -> dict:
+    async def answer(
+        self,
+        question: str,
+        user: User,
+        conversation_id: int | None = None,
+        category: str | None = None,
+        model: str | None = None,
+    ) -> dict:
         started = perf_counter()
 
         if self._is_greeting(question):
@@ -91,7 +98,7 @@ class RAGService:
             prompt = self._build_prompt(question, accepted)
             llm_started = perf_counter()
             try:
-                answer = await create_llm_provider(self.settings.llm).generate(prompt)
+                answer = await create_llm_provider(self.settings.llm).generate(prompt, model=model)
             except Exception:
                 answer = self._extractive_fallback(question, accepted)
             generation_latency_ms = int((perf_counter() - llm_started) * 1000)
