@@ -321,7 +321,7 @@ async def test_ingest_document_link_crawling_loop(mock_httpx_client_class, mock_
     async def mock_get(url, *args, **kwargs):
         mock_resp = MagicMock()
         mock_resp.text = responses.get(str(url), "<html></html>")
-        print(f"DEBUG: mock_get called for URL: {url}, returning text: {mock_resp.text}")
+        mock_resp.is_redirect = False
         mock_resp.raise_for_status = MagicMock()
         return mock_resp
 
@@ -378,6 +378,7 @@ async def test_ingest_document_link_playwright_fallback(mock_httpx_client_class,
     
     mock_resp = MagicMock()
     mock_resp.text = "<html><body>Fallback Page Content</body></html>"
+    mock_resp.is_redirect = False
     mock_resp.raise_for_status = MagicMock()
     mock_client.get = AsyncMock(return_value=mock_resp)
 
@@ -400,8 +401,9 @@ async def test_ingest_document_link_playwright_fallback(mock_httpx_client_class,
         use_case = IngestDocumentUseCase(settings, session)
         await use_case.execute(doc)
 
-        # It should fall back to httpx
-        mock_client.get.assert_called_once_with("https://example.com/playwright", follow_redirects=True, timeout=12.0)
+        # It should fall back to a safe HTTP fetch (redirects/timeout are now
+        # configured on the AsyncClient itself, not passed to .get())
+        mock_client.get.assert_called_once_with("https://example.com/playwright")
         assert doc.status == "indexed"
 
 

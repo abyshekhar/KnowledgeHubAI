@@ -32,6 +32,7 @@ retrieval:
   top_k: 5
   score_threshold: 0.6
   hybrid_alpha: 0.75
+  max_bm25_corpus: 5000
   reranker:
     enabled: false
     model: BAAI/bge-reranker-base

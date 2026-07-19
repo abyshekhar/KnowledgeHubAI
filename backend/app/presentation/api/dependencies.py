@@ -37,6 +37,8 @@ async def get_current_user(
         payload = decode_token(credentials.credentials, settings.app.secret_key)
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
+    if payload.get("type") != "access":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     user = await session.scalar(
         select(User)
         .options(selectinload(User.role))

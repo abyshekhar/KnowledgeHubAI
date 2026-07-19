@@ -46,8 +46,24 @@ class DeterministicOfflineEmbeddingProvider(EmbeddingProvider):
         return [v / norm for v in values]
 
 
+_providers: dict[tuple[str, str], EmbeddingProvider] = {}
+
+
 def create_embedding_provider(settings: EmbeddingSettings) -> EmbeddingProvider:
+    # Cached as a singleton per (provider, model): HuggingFaceEmbeddingProvider
+    # lazy-loads a SentenceTransformer model, which is far too expensive to
+    # re-instantiate (and thus reload from disk) on every request.
+    key = (settings.provider, settings.model)
+    cached = _providers.get(key)
+    if cached is not None:
+        return cached
+
+    provider: EmbeddingProvider
     if settings.provider == "deterministic":
-        return DeterministicOfflineEmbeddingProvider()
-    return HuggingFaceEmbeddingProvider(settings)
+        provider = DeterministicOfflineEmbeddingProvider()
+    else:
+        provider = HuggingFaceEmbeddingProvider(settings)
+
+    _providers[key] = provider
+    return provider
 

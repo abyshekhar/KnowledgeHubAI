@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.infrastructure.auth.passwords import hash_password
 from backend.app.infrastructure.database.models import Role, User
 from backend.app.presentation.api.dependencies import get_session, require_roles
-from backend.app.shared.validation import normalize_email_identifier
+from backend.app.shared.validation import normalize_email_identifier, validate_password_strength
 
 router = APIRouter(dependencies=[Depends(require_roles("admin"))])
 
@@ -26,12 +26,24 @@ class UserCreate(BaseModel):
     def normalize_email(cls, value: str) -> str:
         return normalize_email_identifier(value)
 
+    @field_validator("password")
+    @classmethod
+    def check_password(cls, value: str) -> str:
+        return validate_password_strength(value)
+
 
 class UserUpdate(BaseModel):
     full_name: str | None = None
     role: str | None = None
     is_active: bool | None = None
     password: str | None = None
+
+    @field_validator("password")
+    @classmethod
+    def check_password(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return validate_password_strength(value)
 
 
 @router.get("")

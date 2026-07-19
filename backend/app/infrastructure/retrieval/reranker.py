@@ -42,3 +42,18 @@ class CrossEncoderReranker:
         except Exception as e:
             logger.warning("Reranking failed (fallback to original results): %s", e)
             return results
+
+
+_rerankers: dict[str, CrossEncoderReranker] = {}
+
+
+def create_reranker(settings: RerankerSettings) -> CrossEncoderReranker:
+    # Cached as a singleton per model name so the CrossEncoder weights are
+    # loaded once instead of on every chat request.
+    cached = _rerankers.get(settings.model)
+    if cached is not None:
+        return cached
+
+    reranker = CrossEncoderReranker(settings)
+    _rerankers[settings.model] = reranker
+    return reranker

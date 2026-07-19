@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +14,8 @@ from backend.app.config.settings import Settings
 from backend.app.infrastructure.database.models import Chunk, Document, User
 from backend.app.presentation.api.dependencies import get_current_user, get_session, get_settings, require_roles
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
@@ -20,8 +23,8 @@ class LinkCreateRequest(BaseModel):
     name: str
     url: HttpUrl
     category: str | None = None
-    depth: int = 0
-    max_pages: int = 10
+    depth: int = Field(default=0, ge=0, le=3)
+    max_pages: int = Field(default=10, ge=1, le=100)
     js_render: bool = False
 
 
@@ -29,8 +32,8 @@ class LinkUpdateRequest(BaseModel):
     name: str | None = None
     url: HttpUrl | None = None
     category: str | None = None
-    depth: int | None = None
-    max_pages: int | None = None
+    depth: int | None = Field(default=None, ge=0, le=3)
+    max_pages: int | None = Field(default=None, ge=1, le=100)
     js_render: bool | None = None
 
 
@@ -47,6 +50,8 @@ async def upload_document(
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in settings.security.allowed_extensions:
         raise HTTPException(status_code=400, detail="Unsupported file extension")
+    if file.content_type not in settings.security.allowed_mime_types:
+        raise HTTPException(status_code=400, detail="Unsupported file content type")
     upload_dir = Path(settings.app.upload_dir)
     upload_dir.mkdir(parents=True, exist_ok=True)
     destination = upload_dir / Path(file.filename or "upload").name
@@ -249,6 +254,10 @@ async def _index_document(document_id: int, settings: Settings) -> None:
             try:
                 await IngestDocumentUseCase(settings, session).execute(document)
             except Exception as e:
-                document.status = f"failed: {str(e)}"
+                # Full detail (which can include internal URLs/paths) goes to the
+                # server log only; the status field is user-visible to any
+                # authenticated user via GET /documents, so keep it generic.
+                logger.exception("Failed to index document %s", document_id)
+                document.status = f"failed: {type(e).__name__}"
                 await session.commit()
 

@@ -68,7 +68,7 @@ class RAGService:
             "user": ["user"],
         }.get(role_name, ["user"])
         from backend.app.infrastructure.retrieval.hybrid import HybridRetriever
-        from backend.app.infrastructure.retrieval.reranker import CrossEncoderReranker
+        from backend.app.infrastructure.retrieval.reranker import create_reranker
 
         retriever = HybridRetriever(self.settings, self.session, vector_store)
         results = await retriever.retrieve(
@@ -79,7 +79,7 @@ class RAGService:
             category=category,
         )
 
-        reranker = CrossEncoderReranker(self.settings.retrieval.reranker)
+        reranker = create_reranker(self.settings.retrieval.reranker)
         results = reranker.rerank(question, results)
         retrieval_latency_ms = int((perf_counter() - started) * 1000)
 

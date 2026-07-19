@@ -49,7 +49,7 @@ class HybridRetriever:
         )
         if category and category.lower() != "all":
             stmt = stmt.where(Document.category == category)
-        stmt = stmt.options(selectinload(Chunk.document))
+        stmt = stmt.options(selectinload(Chunk.document)).limit(self.settings.retrieval.max_bm25_corpus)
 
         result = await self.session.scalars(stmt)
         db_chunks = result.all()
@@ -96,12 +96,19 @@ class HybridRetriever:
 
         # Create maps for fast lookup
         dense_map = {res.chunk.text: res.score for res in dense_results}
-        
-        # Deduplicate and build quick lookup map
+
+        # Deduplicate and build quick lookup maps. Dense (FAISS) and sparse
+        # (BM25) results are correlated by exact chunk text, since neither
+        # result type carries a shared chunk id. If two different documents
+        # happen to produce byte-identical chunk text, the first occurrence
+        # wins here - a rare, low-impact edge case rather than a full
+        # identity-based rework.
         chunk_map: dict[str, DocumentChunk] = {}
-        for chunk in all_chunks:
+        text_to_index: dict[str, int] = {}
+        for index, chunk in enumerate(all_chunks):
             if chunk.text not in chunk_map:
                 chunk_map[chunk.text] = chunk
+                text_to_index[chunk.text] = index
 
         # Calculate hybrid scores
         hybrid_candidates: dict[str, float] = {}
@@ -110,14 +117,10 @@ class HybridRetriever:
         for res in dense_results:
             text = res.chunk.text
             dense_score = res.score
-            # Find BM25 score
             sparse_score = 0.0
-            if text in chunk_map:
-                try:
-                    idx = all_chunks.index(chunk_map[text])
-                    sparse_score = float(bm25_scores[idx]) / max_bm25
-                except ValueError:
-                    pass
+            idx = text_to_index.get(text)
+            if idx is not None:
+                sparse_score = float(bm25_scores[idx]) / max_bm25
 
             score = (
                 self.settings.retrieval.hybrid_alpha * dense_score

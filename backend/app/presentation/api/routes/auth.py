@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -12,9 +13,36 @@ from backend.app.infrastructure.auth.passwords import hash_password, verify_pass
 from backend.app.infrastructure.auth.tokens import create_token
 from backend.app.infrastructure.database.models import Role, User
 from backend.app.presentation.api.dependencies import get_session, get_settings, get_current_user
-from backend.app.shared.validation import normalize_email_identifier
+from backend.app.shared.validation import normalize_email_identifier, validate_password_strength
 
 router = APIRouter()
+
+# In-memory login throttle, keyed by normalized email. Single-process only
+# (matches the existing engine-cache pattern in database/session.py) - good
+# enough for this app's single-worker deployment, not a substitute for a
+# shared store if this is ever run with multiple workers.
+_LOGIN_ATTEMPT_WINDOW_SECONDS = 15 * 60
+_LOGIN_MAX_ATTEMPTS = 5
+_login_attempts: dict[str, list[float]] = {}
+
+
+def _check_login_rate_limit(email: str) -> None:
+    now = time.monotonic()
+    attempts = [t for t in _login_attempts.get(email, []) if now - t < _LOGIN_ATTEMPT_WINDOW_SECONDS]
+    _login_attempts[email] = attempts
+    if len(attempts) >= _LOGIN_MAX_ATTEMPTS:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed login attempts. Please try again later.",
+        )
+
+
+def _record_login_failure(email: str) -> None:
+    _login_attempts.setdefault(email, []).append(time.monotonic())
+
+
+def _clear_login_attempts(email: str) -> None:
+    _login_attempts.pop(email, None)
 
 
 class RegisterRequest(BaseModel):
@@ -26,6 +54,11 @@ class RegisterRequest(BaseModel):
     @classmethod
     def normalize_email(cls, value: str) -> str:
         return normalize_email_identifier(value)
+
+    @field_validator("password")
+    @classmethod
+    def check_password(cls, value: str) -> str:
+        return validate_password_strength(value)
 
 
 class LoginRequest(BaseModel):
@@ -47,6 +80,11 @@ class TokenResponse(BaseModel):
 class PasswordChangeRequest(BaseModel):
     current_password: str
     new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def check_new_password(cls, value: str) -> str:
+        return validate_password_strength(value)
 
 
 @router.post("/register", response_model=TokenResponse)
@@ -81,9 +119,12 @@ async def login(
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> TokenResponse:
+    _check_login_rate_limit(payload.email)
     user = await session.scalar(select(User).where(User.email == payload.email, User.is_active.is_(True)))
     if user is None or not verify_password(payload.password, user.password_hash):
+        _record_login_failure(payload.email)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+    _clear_login_attempts(payload.email)
     return _tokens(user.email, settings)
 
 

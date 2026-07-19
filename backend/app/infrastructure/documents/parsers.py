@@ -103,3 +103,19 @@ class WebHTMLParser(HTMLParser):
         return "\n".join(line for line in lines if line)
 
 
+class LinkExtractor(HTMLParser):
+    """Collects `href` targets from anchor tags using a real HTML parser
+    instead of a regex, so link discovery survives malformed/unusual markup."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.hrefs: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() != "a":
+            return
+        for name, value in attrs:
+            if name.lower() == "href" and value:
+                self.hrefs.append(value)
+
+

@@ -22,6 +22,16 @@ def normalize_email_identifier(value: str) -> str:
     return f"{local_part.lower()}@{domain.lower()}"
 
 
+def validate_password_strength(password: str) -> str:
+    if len(password) < 8:
+        raise ValueError("Password must be at least 8 characters long")
+    if len(password) > 128:
+        raise ValueError("Password must be 128 characters or fewer")
+    if password.strip() != password:
+        raise ValueError("Password must not start or end with whitespace")
+    return password
+
+
 def validate_url_security(url_str: str) -> str:
     """
     Validates that a URL is a secure HTTP/HTTPS URL and prevents Server-Side Request Forgery (SSRF).
@@ -73,4 +83,33 @@ def validate_url_security(url_str: str) -> str:
                 raise
 
     return url_str
+
+
+async def fetch_url_safely(url: str, *, timeout: float = 12.0, max_redirects: int = 5):
+    """
+    GETs a URL, re-validating the destination against `validate_url_security`
+    on every redirect hop.
+
+    A plain `httpx.AsyncClient(follow_redirects=True)` only sees the original
+    URL: a public URL can 3xx-redirect to a private/loopback/link-local
+    address and slip straight past an SSRF check that only inspects the
+    starting URL. Following redirects manually here closes that gap.
+    """
+    import httpx
+
+    current_url = url
+    async with httpx.AsyncClient(follow_redirects=False, timeout=timeout) as client:
+        for _ in range(max_redirects + 1):
+            validate_url_security(current_url)
+            response = await client.get(current_url)
+            if not response.is_redirect:
+                response.raise_for_status()
+                return response
+            location = response.headers.get("location")
+            if not location:
+                response.raise_for_status()
+                return response
+            current_url = str(httpx.URL(current_url).join(location))
+
+    raise ValueError(f"Too many redirects while fetching {url}")
 

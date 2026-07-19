@@ -51,6 +51,11 @@ class RetrievalSettings(BaseModel):
     top_k: int = 5
     score_threshold: float = 0.7
     hybrid_alpha: float = 0.75
+    # Upper bound on how many chunks HybridRetriever loads into memory to build
+    # its BM25 index for a single query. BM25 needs the full candidate corpus
+    # (for IDF), so this trades sparse-search recall on very large knowledge
+    # bases for bounded per-query memory/CPU use.
+    max_bm25_corpus: int = 5000
     reranker: RerankerSettings = Field(default_factory=RerankerSettings)
 
 

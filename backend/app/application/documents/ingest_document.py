@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +14,8 @@ from backend.app.infrastructure.documents.parsers import DocumentParser, ParsedP
 from backend.app.infrastructure.embeddings.providers import create_embedding_provider
 from backend.app.infrastructure.vectorstores.factory import create_vector_store
 
+logger = logging.getLogger(__name__)
+
 
 class IngestDocumentUseCase:
     def __init__(self, settings: Settings, session: AsyncSession) -> None:
@@ -21,11 +24,10 @@ class IngestDocumentUseCase:
 
     async def execute(self, document: Document) -> None:
         if document.document_type == "link":
-            import re
+            from collections import deque
             from urllib.parse import urljoin, urlparse
-            import httpx
-            from backend.app.infrastructure.documents.parsers import WebHTMLParser
-            from backend.app.shared.validation import validate_url_security
+            from backend.app.infrastructure.documents.parsers import LinkExtractor, WebHTMLParser
+            from backend.app.shared.validation import fetch_url_safely, validate_url_security
 
             # Parse metadata parameters from tags
             try:
@@ -33,21 +35,23 @@ class IngestDocumentUseCase:
                 depth = meta.get("depth", 0)
                 max_pages = meta.get("max_pages", 10)
                 js_render = meta.get("js_render", False)
-            except Exception as e:
-                print(f"DEBUG: Exception parsing tags: {e}, document.tags: {document.tags}")
+            except Exception:
+                logger.warning(
+                    "Could not parse crawl metadata for document %s, using defaults", document.id
+                )
                 depth = 0
                 max_pages = 10
                 js_render = False
 
             visited = set()
-            queue = [(document.path, 0)]
+            queue = deque([(document.path, 0)])
             parsed = []
 
             base_parsed = urlparse(document.path)
             base_domain = base_parsed.netloc
 
             while queue and len(visited) < max_pages:
-                url, curr_depth = queue.pop(0)
+                url, curr_depth = queue.popleft()
                 if url in visited:
                     continue
                 visited.add(url)
@@ -57,23 +61,33 @@ class IngestDocumentUseCase:
                     if js_render:
                         try:
                             from playwright.async_api import async_playwright
+
+                            async def _guard_route(route):
+                                # Playwright follows redirects (and loads sub-resources)
+                                # internally, outside our control, so every request the
+                                # page makes is re-validated here rather than only the
+                                # initial navigation URL.
+                                try:
+                                    validate_url_security(route.request.url)
+                                except ValueError:
+                                    await route.abort()
+                                else:
+                                    await route.continue_()
+
                             async with async_playwright() as p:
                                 browser = await p.chromium.launch(headless=True)
                                 page = await browser.new_page()
+                                await page.route("**/*", _guard_route)
                                 await page.goto(url, wait_until="networkidle", timeout=15000)
                                 html_content = await page.content()
                                 await browser.close()
-                        except Exception as js_err:
-                            # Fallback to standard httpx if playwright fails
-                            async with httpx.AsyncClient() as client:
-                                response = await client.get(url, follow_redirects=True, timeout=12.0)
-                                response.raise_for_status()
-                                html_content = response.text
-                    else:
-                        async with httpx.AsyncClient() as client:
-                            response = await client.get(url, follow_redirects=True, timeout=12.0)
-                            response.raise_for_status()
+                        except Exception:
+                            # Fallback to standard HTTP if playwright fails
+                            response = await fetch_url_safely(url)
                             html_content = response.text
+                    else:
+                        response = await fetch_url_safely(url)
+                        html_content = response.text
 
                     parser = WebHTMLParser()
                     parser.feed(html_content)
@@ -83,8 +97,9 @@ class IngestDocumentUseCase:
 
                     # If we need to go deeper, extract links from the parsed page
                     if curr_depth < depth:
-                        links = re.findall(r'href=["\'](.*?)["\']', html_content)
-                        for link in links:
+                        link_extractor = LinkExtractor()
+                        link_extractor.feed(html_content)
+                        for link in link_extractor.hrefs:
                             full_url = urljoin(url, link)
                             link_parsed = urlparse(full_url)
                             if link_parsed.netloc == base_domain and link_parsed.scheme in ("http", "https"):
