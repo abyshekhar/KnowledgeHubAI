@@ -17,6 +17,7 @@ from backend.app.presentation.api.routes import (
     documents,
     feedback,
     health,
+    help,
     testgen,
     users,
 )
@@ -79,6 +80,7 @@ app.include_router(chat.router, prefix="/chat", tags=["chat"])
 app.include_router(categories.router, prefix="/categories", tags=["categories"])
 app.include_router(feedback.router, prefix="/feedback", tags=["feedback"])
 app.include_router(testgen.router, prefix="/testgen", tags=["testgen"])
+app.include_router(help.router, prefix="/help", tags=["help"])
 app.include_router(analytics.router)
 app.mount("/metrics", make_asgi_app())
 

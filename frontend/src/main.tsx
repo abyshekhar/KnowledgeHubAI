@@ -6,6 +6,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { KnowledgeBase } from "./pages/KnowledgeBase";
 import { ChatAssistant } from "./pages/ChatAssistant";
 import { TestGenerator } from "./pages/TestGenerator";
+import { HelpGuide } from "./pages/HelpGuide";
 import { UserManagement } from "./pages/UserManagement";
 import { Settings } from "./pages/Settings";
 import { Login } from "./pages/Login";
@@ -65,6 +66,7 @@ function App() {
     chat: <ChatAssistant token={token} selectedModel={selectedModel} onSelectModel={setSelectedModel} />,
     testgen: <TestGenerator token={token} />,
     settings: <Settings token={token} role={userRole} />,
+    help: <HelpGuide token={token} />,
     ...(userRole === "admin" || userRole === "knowledge_manager" ? {
       knowledge: <KnowledgeBase token={token} />,
     } : {}),

@@ -1,4 +1,4 @@
-import { Bot, ClipboardList, FileText, LayoutDashboard, LogOut, Settings, Users } from "lucide-react";
+import { Bot, ClipboardList, FileText, HelpCircle, LayoutDashboard, LogOut, Settings, Users } from "lucide-react";
 import type { ReactNode } from "react";
 
 const items = [
@@ -7,7 +7,8 @@ const items = [
   { id: "chat", label: "Chat Assistant", icon: Bot },
   { id: "testgen", label: "Test Generator", icon: ClipboardList },
   { id: "users", label: "Users", icon: Users },
-  { id: "settings", label: "Settings", icon: Settings }
+  { id: "settings", label: "Settings", icon: Settings },
+  { id: "help", label: "Help Guide", icon: HelpCircle }
 ];
 
 export function AppLayout({
@@ -29,7 +30,10 @@ export function AppLayout({
     if (roleLower === "knowledge_manager") {
       return item.id !== "users";
     }
-    return item.id === "dashboard" || item.id === "chat" || item.id === "testgen" || item.id === "settings";
+    return (
+      item.id === "dashboard" || item.id === "chat" || item.id === "testgen" ||
+      item.id === "settings" || item.id === "help"
+    );
   });
 
   return (
