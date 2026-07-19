@@ -90,7 +90,7 @@ class RAGService:
         accepted = [item for item in results if item.score >= self.settings.retrieval.score_threshold]
         accepted = accepted[:self.settings.retrieval.top_k]
         if not accepted:
-            answer = LOW_CONFIDENCE_RESPONSE
+            answer = self._no_answer_message(results)
         else:
             prompt = self._build_prompt(question, accepted)
             llm_started = perf_counter()
@@ -131,6 +131,27 @@ class RAGService:
             "retrieval_latency_ms": retrieval_latency_ms,
             "generation_latency_ms": locals().get("generation_latency_ms", 0),
         }
+
+    def _no_answer_message(self, results) -> str:
+        """Friendlier version of LOW_CONFIDENCE_RESPONSE for when retrieval itself
+        didn't clear score_threshold, before anything reaches the LLM. Tells the
+        user something concrete to try next instead of a flat refusal - the exact
+        guidance depends on whether anything was found at all versus a near miss."""
+        if not results:
+            return (
+                f"{LOW_CONFIDENCE_RESPONSE} No related content was found at all. This can happen if no "
+                "documents cover the topic yet, a category filter is excluding the right documents, or "
+                "your account doesn't have access to them. Try uploading a relevant document, clearing "
+                "the category filter, or checking with an admin about document access."
+            )
+        best = results[0]
+        return (
+            f"{LOW_CONFIDENCE_RESPONSE} The closest match was in \"{best.chunk.document_name}\", but it "
+            "wasn't a close enough match to answer confidently. Try asking about something more specific "
+            "from that document - a particular term, name, date, metric, or section - rather than a broad "
+            "request like \"insights\" or \"summary\": answers are grounded in short passages, not "
+            "computed across an entire document."
+        )
 
     def _build_prompt(self, question: str, results) -> str:
         context = "\n\n".join(
