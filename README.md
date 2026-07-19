@@ -22,19 +22,19 @@
 
 ---
 
-KnowledgeHub AI is a fully offline, self-hosted, enterprise-grade AI Knowledge Assistant designed to let organizations chat securely with internal document bases (PDF, DOCX, Markdown, TXT, and Web/Wiki links) using natural language.
+KnowledgeHub AI is a fully offline, self-hosted, enterprise-grade AI Knowledge Assistant designed to let organizations chat securely with internal document bases (PDF, DOCX, Markdown, TXT, CSV, and Web/Wiki links) using natural language.
 
 ---
 
 ## Key Highlights
 
 - **100% Offline-Capable**: Fully runs on a single local machine or corporate server without sending data to external APIs (no OpenAI, no Azure, no third-party cloud dependency).
-- **Web Links Integration**: Index external/internal web links (Confluence, SharePoint, Notion, custom HTML pages) directly into the knowledge base. Add, update, and remove links via the admin panel. Includes built-in Server-Side Request Forgery (SSRF) protection.
+- **Web Links Integration**: Index external/internal web links (Confluence, SharePoint, Notion, custom HTML pages) directly into the knowledge base, with configurable crawl depth and page limits and optional JavaScript rendering (via Playwright) for dynamic sites. Add, update, and remove links via the admin panel. Includes built-in Server-Side Request Forgery (SSRF) protection that re-validates every redirect hop, not just the initial URL.
 - **Clean Architecture & Enterprise Patterns**: Strongly separated into presentation, application, domain, infrastructure, and configuration layers.
 - **Advanced Chunking Pipeline**: Supports recursive character chunking, structural section-aware chunking, and similarity-based semantic sentence chunking.
-- **Hybrid Retrieval System**: Combines FAISS dense semantic search and BM25 sparse keyword-based search with linear score blending (`hybrid_alpha`) and CrossEncoder rerankers.
-- **Security & Access Control**: Features JWT session/refresh tokens, Role-Based Access Control (Admin, Knowledge Manager, and User), and access level document filtering.
-- **FastAPI + React/Vite Admin Console**: Modern responsive dashboard, document upload manager, wiki link indexer, conversational chat assistant, and user management UI.
+- **Hybrid Retrieval System**: Combines FAISS dense semantic search and BM25 sparse keyword-based search with linear score blending (`hybrid_alpha`) and CrossEncoder rerankers. Embedding models and the vector index are loaded once and reused across requests for low query latency.
+- **Security & Access Control**: Features JWT session/refresh tokens with strict access/refresh scope enforcement, Role-Based Access Control (Admin, Knowledge Manager, and User), access level document filtering, password strength requirements, login rate limiting, and file extension + MIME type validation on uploads.
+- **FastAPI + React/Vite Admin Console**: Modern responsive dashboard, document upload manager with live indexing status (including failure-detail badges), wiki link indexer, conversational chat assistant with hover-preview source citations and relevance scores, and user management UI.
 
 ### Why KnowledgeHub AI?
 
@@ -98,6 +98,11 @@ The system is organized into a five-tier architecture under the `backend/app` na
    source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
    pip install -r requirements.txt
    ```
+   *Optional: to enable JavaScript-rendered web link crawling, also install the Playwright browser binary:*
+   ```bash
+   playwright install chromium
+   ```
+   *Links added without this step still index fine — crawling automatically falls back to plain HTTP fetching.*
 
 3. **Initialize Database & Create Admin User**:
    ```bash
@@ -142,6 +147,7 @@ retrieval:
   top_k: 5
   score_threshold: 0.7
   hybrid_alpha: 0.75
+  max_bm25_corpus: 5000  # cap on chunks loaded into memory per query for BM25
   reranker:
     enabled: false
     model: BAAI/bge-reranker-base
@@ -156,7 +162,7 @@ chunking:
 
 ## Verification & Testing
 
-Verify system correctness by executing the test suite:
+Verify system correctness by executing the test suite (unit tests in `backend/tests/unit`, end-to-end RBAC/ingestion checks in `backend/tests/integration`):
 ```bash
 PYTHONPATH=. .venv/bin/pytest
 ```
