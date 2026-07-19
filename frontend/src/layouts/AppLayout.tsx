@@ -1,10 +1,11 @@
-import { Bot, FileText, LayoutDashboard, LogOut, Settings, Users } from "lucide-react";
+import { Bot, ClipboardList, FileText, LayoutDashboard, LogOut, Settings, Users } from "lucide-react";
 import type { ReactNode } from "react";
 
 const items = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "knowledge", label: "Knowledge Base", icon: FileText },
   { id: "chat", label: "Chat Assistant", icon: Bot },
+  { id: "testgen", label: "Test Generator", icon: ClipboardList },
   { id: "users", label: "Users", icon: Users },
   { id: "settings", label: "Settings", icon: Settings }
 ];
@@ -28,7 +29,7 @@ export function AppLayout({
     if (roleLower === "knowledge_manager") {
       return item.id !== "users";
     }
-    return item.id === "dashboard" || item.id === "chat" || item.id === "settings";
+    return item.id === "dashboard" || item.id === "chat" || item.id === "testgen" || item.id === "settings";
   });
 
   return (

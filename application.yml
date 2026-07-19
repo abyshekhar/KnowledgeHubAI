@@ -42,6 +42,10 @@ chunking:
   chunk_size: 500
   chunk_overlap: 50
 
+test_generation:
+  max_clarifying_rounds: 2
+  context_top_k: 6
+
 security:
   allowed_extensions:
     - .pdf

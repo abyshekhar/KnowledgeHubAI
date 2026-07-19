@@ -111,3 +111,54 @@ class Category(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     description: Mapped[str | None] = mapped_column(String(255))
 
+
+class TestGenSession(Base, TimestampMixin):
+    __tablename__ = "test_gen_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    requirement_document_id: Mapped[int] = mapped_column(ForeignKey("documents.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    context_category: Mapped[str | None] = mapped_column(String(128))
+    status: Mapped[str] = mapped_column(String(32), default="analyzing")
+    clarifying_round: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    assumptions_json: Mapped[str] = mapped_column(Text, default="[]")
+    requirement_document: Mapped[Document] = relationship()
+
+
+class TestClarifyingQuestion(Base, TimestampMixin):
+    __tablename__ = "test_clarifying_questions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("test_gen_sessions.id"), index=True)
+    round: Mapped[int] = mapped_column(Integer, default=0)
+    question: Mapped[str] = mapped_column(Text)
+    answer: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(32), default="pending")
+    order_index: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class TestScenario(Base, TimestampMixin):
+    __tablename__ = "test_scenarios"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("test_gen_sessions.id"), index=True)
+    title: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str] = mapped_column(Text, default="")
+    priority: Mapped[str] = mapped_column(String(32), default="medium")
+    order_index: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class TestCase(Base, TimestampMixin):
+    __tablename__ = "test_cases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    scenario_id: Mapped[int] = mapped_column(ForeignKey("test_scenarios.id"), index=True)
+    title: Mapped[str] = mapped_column(String(255))
+    preconditions: Mapped[str] = mapped_column(Text, default="")
+    steps_json: Mapped[str] = mapped_column(Text, default="[]")
+    expected_result: Mapped[str] = mapped_column(Text, default="")
+    priority: Mapped[str] = mapped_column(String(32), default="medium")
+    case_type: Mapped[str] = mapped_column(String(32), default="positive")
+    order_index: Mapped[int] = mapped_column(Integer, default=0)
+

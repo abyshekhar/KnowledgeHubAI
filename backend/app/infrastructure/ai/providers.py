@@ -10,17 +10,19 @@ class OllamaProvider(LLMProvider):
     def __init__(self, settings: LLMSettings) -> None:
         self.settings = settings
 
-    async def generate(self, prompt: str, model: str | None = None) -> str:
+    async def generate(
+        self, prompt: str, model: str | None = None, response_format: str | None = None
+    ) -> str:
+        payload = {
+            "model": model or self.settings.model,
+            "prompt": prompt,
+            "stream": False,
+            "options": {"temperature": self.settings.temperature},
+        }
+        if response_format:
+            payload["format"] = response_format
         async with httpx.AsyncClient(timeout=self.settings.timeout_seconds) as client:
-            response = await client.post(
-                f"{self.settings.base_url}/api/generate",
-                json={
-                    "model": model or self.settings.model,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {"temperature": self.settings.temperature},
-                },
-            )
+            response = await client.post(f"{self.settings.base_url}/api/generate", json=payload)
             response.raise_for_status()
             return response.json().get("response", "")
 
@@ -48,7 +50,9 @@ class TransformersProvider(LLMProvider):
     def __init__(self, settings: LLMSettings) -> None:
         self.settings = settings
 
-    async def generate(self, prompt: str, model: str | None = None) -> str:
+    async def generate(
+        self, prompt: str, model: str | None = None, response_format: str | None = None
+    ) -> str:
         raise RuntimeError(
             "TransformersProvider is configured but not loaded. "
             "Install a local text-generation model adapter for this deployment."

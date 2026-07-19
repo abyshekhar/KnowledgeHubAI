@@ -5,6 +5,7 @@ from time import perf_counter
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.app.application.chat.access import allowed_access_levels
 from backend.app.config.settings import Settings
 from backend.app.infrastructure.ai.providers import create_llm_provider
 from backend.app.infrastructure.database.models import Conversation, Message, User
@@ -69,11 +70,7 @@ class RAGService:
         vector_store = create_vector_store(self.settings.vector_store)
         query_vector = embeddings.embed_query(question)
         role_name = user.role.name if user.role else "user"
-        allowed_levels = {
-            "admin": ["user", "knowledge_manager", "manager", "admin"],
-            "knowledge_manager": ["user", "knowledge_manager", "manager"],
-            "user": ["user"],
-        }.get(role_name, ["user"])
+        allowed_levels = allowed_access_levels(role_name)
         from backend.app.infrastructure.retrieval.hybrid import HybridRetriever
         from backend.app.infrastructure.retrieval.reranker import create_reranker
 

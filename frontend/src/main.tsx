@@ -5,6 +5,7 @@ import { AppLayout } from "./layouts/AppLayout";
 import { Dashboard } from "./pages/Dashboard";
 import { KnowledgeBase } from "./pages/KnowledgeBase";
 import { ChatAssistant } from "./pages/ChatAssistant";
+import { TestGenerator } from "./pages/TestGenerator";
 import { UserManagement } from "./pages/UserManagement";
 import { Settings } from "./pages/Settings";
 import { Login } from "./pages/Login";
@@ -62,6 +63,7 @@ function App() {
   const pages: Record<string, React.ReactNode> = {
     dashboard: <Dashboard token={token} selectedModel={selectedModel} onSelectModel={setSelectedModel} />,
     chat: <ChatAssistant token={token} selectedModel={selectedModel} onSelectModel={setSelectedModel} />,
+    testgen: <TestGenerator token={token} />,
     settings: <Settings token={token} role={userRole} />,
     ...(userRole === "admin" || userRole === "knowledge_manager" ? {
       knowledge: <KnowledgeBase token={token} />,

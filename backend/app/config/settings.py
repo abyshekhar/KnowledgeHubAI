@@ -76,6 +76,11 @@ class SecuritySettings(BaseModel):
     ]
 
 
+class TestGenerationSettings(BaseModel):
+    max_clarifying_rounds: int = 2
+    context_top_k: int = 6
+
+
 class Settings(BaseModel):
     app: AppSettings = Field(default_factory=AppSettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
@@ -85,6 +90,7 @@ class Settings(BaseModel):
     retrieval: RetrievalSettings = Field(default_factory=RetrievalSettings)
     chunking: ChunkingSettings = Field(default_factory=ChunkingSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
+    test_generation: TestGenerationSettings = Field(default_factory=TestGenerationSettings)
 
 
 @lru_cache
