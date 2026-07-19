@@ -63,7 +63,7 @@ function App() {
 
   const pages: Record<string, React.ReactNode> = {
     dashboard: <Dashboard token={token} selectedModel={selectedModel} onSelectModel={setSelectedModel} />,
-    chat: <ChatAssistant token={token} selectedModel={selectedModel} onSelectModel={setSelectedModel} />,
+    chat: <ChatAssistant token={token} role={userRole} selectedModel={selectedModel} onSelectModel={setSelectedModel} />,
     testgen: <TestGenerator token={token} />,
     settings: <Settings token={token} role={userRole} />,
     help: <HelpGuide token={token} />,

@@ -1,4 +1,4 @@
-import { Send, Trash2 } from "lucide-react";
+import { AlertCircle, BookmarkPlus, Check, Copy, RefreshCw, Send, Trash2, X } from "lucide-react";
 import { FormEvent, useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { api } from "../api/client";
@@ -8,6 +8,14 @@ type ChatResponse = {
   answer: string;
   sources: Array<{ document_name: string; page_number: number | null; score: number; text?: string }>;
   conversation_id: number;
+  message_id: number;
+};
+
+type ChatMessage = {
+  id?: number;
+  role: string;
+  content: string;
+  sources?: ChatResponse["sources"];
 };
 
 type LlmStatus = {
@@ -17,21 +25,34 @@ type LlmStatus = {
   models: string[];
 };
 
+const CAN_MANAGE_KNOWLEDGE_BASE = new Set(["admin", "knowledge_manager"]);
+
 export function ChatAssistant({
   token,
+  role,
   selectedModel,
   onSelectModel
 }: {
   token: string;
+  role: string;
   selectedModel: string;
   onSelectModel: (model: string) => void;
 }) {
   const [question, setQuestion] = useState("");
-  const [messages, setMessages] = useState<Array<{ role: string; content: string; sources?: ChatResponse["sources"] }>>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [isPending, setIsPending] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string>("All");
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [regeneratingId, setRegeneratingId] = useState<number | null>(null);
+  const [savingMessage, setSavingMessage] = useState<{ id: number; content: string } | null>(null);
+  const [saveTitle, setSaveTitle] = useState("");
+  const [saveCategory, setSaveCategory] = useState("General");
+  const [saveError, setSaveError] = useState("");
+  const [savedId, setSavedId] = useState<number | null>(null);
   const messageEndRef = useRef<HTMLDivElement>(null);
+
+  const canManageKnowledgeBase = CAN_MANAGE_KNOWLEDGE_BASE.has(role);
 
   const categoriesQuery = useQuery({
     queryKey: ["categories"],
@@ -59,7 +80,7 @@ export function ChatAssistant({
         Array<{
           id: number;
           title: string;
-          messages: Array<{ role: string; content: string; sources?: ChatResponse["sources"] }>;
+          messages: ChatMessage[];
         }>
       >("/chat/history", token)
   });
@@ -82,7 +103,10 @@ export function ChatAssistant({
         })
       });
       setConversationId(response.conversation_id);
-      setMessages((items) => [...items, { role: "assistant", content: response.answer, sources: response.sources }]);
+      setMessages((items) => [
+        ...items,
+        { id: response.message_id, role: "assistant", content: response.answer, sources: response.sources }
+      ]);
       historyQuery.refetch();
     } catch (error) {
       setMessages((items) => [
@@ -119,16 +143,76 @@ export function ChatAssistant({
     }
   });
 
+  const regenerateMutation = useMutation({
+    mutationFn: async (messageId: number) =>
+      api<ChatResponse>("/chat/regenerate", token, {
+        method: "POST",
+        body: JSON.stringify({
+          message_id: messageId,
+          category: categoryFilter === "All" ? null : categoryFilter,
+          model: activeModel || null
+        })
+      }),
+    onMutate: (messageId: number) => {
+      setRegeneratingId(messageId);
+    },
+    onSuccess: (response, messageId) => {
+      setMessages((items) =>
+        items.map((message) =>
+          message.id === messageId
+            ? { ...message, content: response.answer, sources: response.sources }
+            : message
+        )
+      );
+      historyQuery.refetch();
+    },
+    onSettled: () => {
+      setRegeneratingId(null);
+    }
+  });
+
+  const addToKnowledgeBaseMutation = useMutation({
+    mutationFn: async (payload: { title: string; content: string; category: string | null }) =>
+      api<{ id: number; status: string }>("/documents/from-text", token, {
+        method: "POST",
+        body: JSON.stringify(payload)
+      }),
+    onSuccess: () => {
+      const savedMessageId = savingMessage?.id ?? null;
+      setSavingMessage(null);
+      setSaveError("");
+      setSavedId(savedMessageId);
+      setTimeout(() => setSavedId((current) => (current === savedMessageId ? null : current)), 2500);
+    },
+    onError: (error: unknown) => {
+      setSaveError(error instanceof Error ? error.message : "Failed to save to knowledge base.");
+    }
+  });
+
+  async function copyMessage(index: number, content: string) {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedIndex(index);
+      setTimeout(() => setCopiedIndex((current) => (current === index ? null : current)), 1500);
+    } catch {
+      // Clipboard access can be denied by the browser - nothing useful to recover here.
+    }
+  }
+
+  function openSaveModal(message: ChatMessage) {
+    if (message.id === undefined) return;
+    setSavingMessage({ id: message.id, content: message.content });
+    setSaveTitle(`Chat response - ${new Date().toLocaleString()}`);
+    setSaveCategory(categoriesQuery.data?.[0]?.name ?? "General");
+    setSaveError("");
+  }
+
   const startNewChat = () => {
     setConversationId(null);
     setMessages([]);
   };
 
-  const loadSession = (session: {
-    id: number;
-    title: string;
-    messages: Array<{ role: string; content: string; sources?: ChatResponse["sources"] }>;
-  }) => {
+  const loadSession = (session: { id: number; title: string; messages: ChatMessage[] }) => {
     setConversationId(session.id);
     setMessages(session.messages);
   };
@@ -261,6 +345,39 @@ export function ChatAssistant({
                     </div>
                   </div>
                 ) : null}
+                {message.role === "assistant" && (
+                  <div className="mt-2 flex items-center gap-1 border-t border-slate-200/60 pt-2">
+                    <button
+                      onClick={() => copyMessage(index, message.content)}
+                      title="Copy response"
+                      className="flex items-center gap-1 rounded px-1.5 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-200/70 hover:text-slate-700 transition"
+                    >
+                      {copiedIndex === index ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+                      {copiedIndex === index ? "Copied" : "Copy"}
+                    </button>
+                    {message.id !== undefined && (
+                      <button
+                        onClick={() => regenerateMutation.mutate(message.id!)}
+                        disabled={regeneratingId === message.id}
+                        title="Regenerate response"
+                        className="flex items-center gap-1 rounded px-1.5 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-200/70 hover:text-slate-700 transition disabled:opacity-50"
+                      >
+                        <RefreshCw size={12} className={regeneratingId === message.id ? "animate-spin" : ""} />
+                        {regeneratingId === message.id ? "Regenerating..." : "Regenerate"}
+                      </button>
+                    )}
+                    {canManageKnowledgeBase && message.id !== undefined && (
+                      <button
+                        onClick={() => openSaveModal(message)}
+                        title="Add this response to the knowledge base"
+                        className="flex items-center gap-1 rounded px-1.5 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-200/70 hover:text-slate-700 transition"
+                      >
+                        {savedId === message.id ? <Check size={12} className="text-emerald-600" /> : <BookmarkPlus size={12} />}
+                        {savedId === message.id ? "Saved" : "Add to Knowledge Base"}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
             {isPending && (
@@ -286,7 +403,91 @@ export function ChatAssistant({
           </form>
         </section>
       </div>
+
+      {savingMessage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg border border-line bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                <BookmarkPlus size={18} className="text-brand" />
+                Add to Knowledge Base
+              </h3>
+              <button
+                onClick={() => setSavingMessage(null)}
+                className="text-slate-400 hover:text-slate-600 transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!saveTitle.trim()) {
+                  setSaveError("Title is required.");
+                  return;
+                }
+                addToKnowledgeBaseMutation.mutate({
+                  title: saveTitle.trim(),
+                  content: savingMessage.content,
+                  category: saveCategory || null
+                });
+              }}
+              className="space-y-4"
+            >
+              {saveError && (
+                <div className="rounded bg-red-50 p-3 text-xs text-red-700 border border-red-200 flex items-start gap-1">
+                  <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                  <span>{saveError}</span>
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">Title</label>
+                <input
+                  type="text"
+                  value={saveTitle}
+                  onChange={(e) => setSaveTitle(e.target.value)}
+                  className="w-full h-10 px-3 rounded border border-line text-sm focus:border-brand focus:outline-none"
+                  placeholder="e.g. AdSense report summary"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">Category</label>
+                <select
+                  value={saveCategory}
+                  onChange={(e) => setSaveCategory(e.target.value)}
+                  className="w-full h-10 px-2 rounded border border-line bg-white text-sm focus:border-brand focus:outline-none"
+                >
+                  {(categoriesQuery.data ?? []).map((cat) => (
+                    <option key={cat.id} value={cat.name}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">Content preview</label>
+                <p className="max-h-32 overflow-y-auto whitespace-pre-wrap rounded border border-line bg-slate-50 p-2 text-xs text-slate-600">
+                  {savingMessage.content}
+                </p>
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setSavingMessage(null)}
+                  className="h-10 px-4 rounded border border-line text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={addToKnowledgeBaseMutation.isPending}
+                  className="flex h-10 items-center justify-center gap-2 rounded bg-brand px-4 text-sm font-medium text-white hover:bg-brand/90 disabled:opacity-60 transition"
+                >
+                  {addToKnowledgeBaseMutation.isPending ? "Saving..." : "Save to Knowledge Base"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }
-

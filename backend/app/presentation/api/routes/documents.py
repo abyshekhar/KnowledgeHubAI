@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Annotated
+from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field, HttpUrl
@@ -37,6 +39,17 @@ class LinkUpdateRequest(BaseModel):
     js_render: bool | None = None
 
 
+class TextDocumentCreateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    content: str = Field(min_length=1, max_length=200_000)
+    category: str | None = None
+
+
+def _safe_filename_stem(title: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9._ -]", "", title).strip()
+    slug = re.sub(r"\s+", "_", slug)
+    return slug[:80] or "note"
+
 
 @router.post("/upload", dependencies=[Depends(require_roles("admin", "knowledge_manager"))])
 async def upload_document(
@@ -67,6 +80,37 @@ async def upload_document(
         status="pending",
         uploaded_by_id=user.id,
         category=category,
+    )
+    session.add(document)
+    await session.commit()
+    await session.refresh(document)
+    background_tasks.add_task(_index_document, document.id, settings)
+    return {"id": document.id, "status": "queued"}
+
+
+@router.post("/from-text", dependencies=[Depends(require_roles("admin", "knowledge_manager"))])
+async def create_document_from_text(
+    request: TextDocumentCreateRequest,
+    background_tasks: BackgroundTasks,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """Saves arbitrary text (e.g. a chat assistant response) as a new indexed
+    document, reusing the normal upload/ingest pipeline. Gated behind the same
+    roles as file upload, since it adds content to the shared knowledge base."""
+    upload_dir = Path(settings.app.upload_dir)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    destination = upload_dir / f"{_safe_filename_stem(request.title)}-{uuid4().hex[:8]}.txt"
+    destination.write_text(request.content, encoding="utf-8")
+
+    document = Document(
+        name=request.title.strip()[:255],
+        path=str(destination),
+        document_type="txt",
+        status="pending",
+        uploaded_by_id=user.id,
+        category=request.category,
     )
     session.add(document)
     await session.commit()

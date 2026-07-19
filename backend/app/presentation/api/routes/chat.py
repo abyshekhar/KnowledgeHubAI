@@ -13,6 +13,7 @@ from backend.app.config.settings import Settings
 from backend.app.infrastructure.ai.providers import create_llm_provider
 from backend.app.infrastructure.database.models import Conversation, Message, User
 from backend.app.presentation.api.dependencies import get_current_user, get_session, get_settings
+from backend.app.shared.errors import NotAuthorizedError, NotFoundError
 
 router = APIRouter()
 
@@ -20,6 +21,12 @@ router = APIRouter()
 class ChatRequest(BaseModel):
     question: str
     conversation_id: int | None = None
+    category: str | None = None
+    model: str | None = None
+
+
+class RegenerateRequest(BaseModel):
+    message_id: int
     category: str | None = None
     model: str | None = None
 
@@ -34,6 +41,23 @@ async def query(
     return await RAGService(settings, session).answer(
         payload.question, user, payload.conversation_id, payload.category, payload.model
     )
+
+
+@router.post("/regenerate")
+async def regenerate(
+    payload: RegenerateRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    try:
+        return await RAGService(settings, session).regenerate(
+            payload.message_id, user, payload.category, payload.model
+        )
+    except NotAuthorizedError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/models")
@@ -87,6 +111,7 @@ async def history(
                 "title": conversation.title,
                 "messages": [
                     {
+                        "id": message.id,
                         "role": message.role,
                         "content": message.content,
                         "sources": json.loads(message.sources_json),

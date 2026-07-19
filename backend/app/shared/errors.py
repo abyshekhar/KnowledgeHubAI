@@ -8,3 +8,11 @@ class KnowledgeHubError(Exception):
 class LowConfidenceError(KnowledgeHubError):
     pass
 
+
+class NotFoundError(KnowledgeHubError):
+    pass
+
+
+class NotAuthorizedError(KnowledgeHubError):
+    pass
+

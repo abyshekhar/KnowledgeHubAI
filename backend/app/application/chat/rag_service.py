@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from time import perf_counter
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.application.chat.access import allowed_access_levels
@@ -11,8 +12,18 @@ from backend.app.infrastructure.ai.providers import create_llm_provider
 from backend.app.infrastructure.database.models import Conversation, Message, User
 from backend.app.infrastructure.embeddings.providers import create_embedding_provider
 from backend.app.infrastructure.vectorstores.factory import create_vector_store
+from backend.app.shared.errors import NotAuthorizedError, NotFoundError
 
 LOW_CONFIDENCE_RESPONSE = "I could not find enough information in the knowledge base to answer this question."
+
+GREETING_RESPONSE = (
+    "Hello! I am KnowledgeHub AI, your offline document assistant. "
+    "I can help answer questions based on the documents uploaded to the knowledge base.\n\n"
+    "To get started:\n"
+    "1. Go to the **Knowledge Base** tab and upload documents (PDF, DOCX, TXT, MD).\n"
+    "2. Once uploaded and indexed, type your query here.\n"
+    "3. I will search the documents and answer based strictly on the content, citing sources."
+)
 
 
 class RAGService:
@@ -37,35 +48,93 @@ class RAGService:
         category: str | None = None,
         model: str | None = None,
     ) -> dict:
-        started = perf_counter()
+        result = await self._compute_answer(question, user, category, model)
 
+        conversation = await self._conversation(user, conversation_id, question)
+        self.session.add(Message(conversation_id=conversation.id, role="user", content=question))
+        assistant = Message(
+            conversation_id=conversation.id,
+            role="assistant",
+            content=result["answer"],
+            sources_json=json.dumps(result["sources"]),
+        )
+        self.session.add(assistant)
+        await self.session.commit()
+
+        return {
+            "answer": result["answer"],
+            "sources": result["sources"],
+            "conversation_id": conversation.id,
+            "message_id": assistant.id,
+            "retrieval_latency_ms": result["retrieval_latency_ms"],
+            "generation_latency_ms": result["generation_latency_ms"],
+        }
+
+    async def regenerate(
+        self,
+        message_id: int,
+        user: User,
+        category: str | None = None,
+        model: str | None = None,
+    ) -> dict:
+        """Re-runs retrieval + generation for the question behind an existing
+        assistant message and overwrites that message in place, rather than
+        appending a duplicate question/answer pair to the conversation."""
+        assistant_message = await self.session.get(Message, message_id)
+        if assistant_message is None or assistant_message.role != "assistant":
+            raise NotFoundError(f"No assistant message with id {message_id}")
+
+        conversation = await self.session.get(Conversation, assistant_message.conversation_id)
+        if conversation is None:
+            raise NotFoundError(f"No conversation for message {message_id}")
+        if conversation.user_id != user.id and (not user.role or user.role.name != "admin"):
+            raise NotAuthorizedError("Not authorized to regenerate this message")
+
+        question_message = await self.session.scalar(
+            select(Message)
+            .where(
+                Message.conversation_id == conversation.id,
+                Message.id < assistant_message.id,
+                Message.role == "user",
+            )
+            .order_by(Message.id.desc())
+        )
+        if question_message is None:
+            raise NotFoundError("Could not find the original question for this response")
+
+        result = await self._compute_answer(question_message.content, user, category, model)
+
+        assistant_message.content = result["answer"]
+        assistant_message.sources_json = json.dumps(result["sources"])
+        await self.session.commit()
+
+        return {
+            "answer": result["answer"],
+            "sources": result["sources"],
+            "conversation_id": conversation.id,
+            "message_id": assistant_message.id,
+            "retrieval_latency_ms": result["retrieval_latency_ms"],
+            "generation_latency_ms": result["generation_latency_ms"],
+        }
+
+    async def _compute_answer(
+        self,
+        question: str,
+        user: User,
+        category: str | None,
+        model: str | None,
+    ) -> dict:
+        """Core retrieval + generation, with no conversation/message persistence
+        - shared by answer() (new turn) and regenerate() (overwrite in place)."""
         if self._is_greeting(question):
-            conversation = await self._conversation(user, conversation_id, question)
-            self.session.add(Message(conversation_id=conversation.id, role="user", content=question))
-            answer = (
-                "Hello! I am KnowledgeHub AI, your offline document assistant. "
-                "I can help answer questions based on the documents uploaded to the knowledge base.\n\n"
-                "To get started:\n"
-                "1. Go to the **Knowledge Base** tab and upload documents (PDF, DOCX, TXT, MD).\n"
-                "2. Once uploaded and indexed, type your query here.\n"
-                "3. I will search the documents and answer based strictly on the content, citing sources."
-            )
-            assistant = Message(
-                conversation_id=conversation.id,
-                role="assistant",
-                content=answer,
-                sources_json="[]",
-            )
-            self.session.add(assistant)
-            await self.session.commit()
             return {
-                "answer": answer,
+                "answer": GREETING_RESPONSE,
                 "sources": [],
-                "conversation_id": conversation.id,
-                "message_id": assistant.id,
                 "retrieval_latency_ms": 0,
                 "generation_latency_ms": 0,
             }
+
+        started = perf_counter()
         embeddings = create_embedding_provider(self.settings.embeddings)
         vector_store = create_vector_store(self.settings.vector_store)
         query_vector = embeddings.embed_query(question)
@@ -89,6 +158,7 @@ class RAGService:
 
         accepted = [item for item in results if item.score >= self.settings.retrieval.score_threshold]
         accepted = accepted[:self.settings.retrieval.top_k]
+        generation_latency_ms = 0
         if not accepted:
             answer = self._no_answer_message(results)
         else:
@@ -112,24 +182,11 @@ class RAGService:
             for item in accepted
         ]
 
-        conversation = await self._conversation(user, conversation_id, question)
-        self.session.add(Message(conversation_id=conversation.id, role="user", content=question))
-        assistant = Message(
-            conversation_id=conversation.id,
-            role="assistant",
-            content=answer,
-            sources_json=json.dumps(sources),
-        )
-        self.session.add(assistant)
-        await self.session.commit()
-
         return {
             "answer": answer,
             "sources": sources,
-            "conversation_id": conversation.id,
-            "message_id": assistant.id,
             "retrieval_latency_ms": retrieval_latency_ms,
-            "generation_latency_ms": locals().get("generation_latency_ms", 0),
+            "generation_latency_ms": generation_latency_ms,
         }
 
     def _no_answer_message(self, results) -> str:
@@ -195,18 +252,18 @@ class RAGService:
             )
             generated = await llm.generate(title_prompt)
             generated = generated.strip().strip('"').strip("'").strip("`").strip()
-            
+
             # Clean up potential introductory phrases/prefixes
             for prefix in ["title:", "summary:", "topic:"]:
                 if generated.lower().startswith(prefix):
                     generated = generated[len(prefix):].strip()
-            
+
             # Ensure it is valid, not too long, and not multiline
             if generated and len(generated) <= 50 and "\n" not in generated:
                 return generated
         except Exception:
             pass
-            
+
         return fallback
 
     async def _conversation(self, user: User, conversation_id: int | None, question: str) -> Conversation:
@@ -214,7 +271,7 @@ class RAGService:
             existing = await self.session.get(Conversation, conversation_id)
             if existing:
                 return existing
-        
+
         title = await self._generate_title(question)
 
         conversation = Conversation(user_id=user.id, title=title)
